@@ -54,6 +54,14 @@ Drag the moon to spin it. Let go mid-drag to throw it; press on it while it's tu
 
 ![A clean frame](docs/screenshots/09-clean.jpg)
 
+### In front of or behind the water
+
+The **In front** button sends the moon up behind the surface (it then reads **Behind**). It glides up into the bright window and shrinks, as if far above, and from then on you see it through the water: it's rendered off-screen each frame and looked up at a position bent by the surface's slope, so the waves wobble it, it dims toward the window's edge where less light gets through, and it disappears past the critical angle, where its lower edge dips into the dark water. The bright reflection fades to a faint shimmer so there aren't two moons, and the halo follows it up. You can still spin it.
+
+![The moon behind the water at night](docs/screenshots/18-moon-behind.jpg)
+
+![The moon behind the water by day](docs/screenshots/19-moon-behind-day.jpg)
+
 ### The sky
 
 Five sky presets, at the top of the controls, set the time of day. Every colour in the scene comes from one palette: the water on both sides, the light falling from above, the sky seen through the surface and the glow around the moon in it, the reflection and its bloom, the halo, and the moon's own tint, shadow and crater relief. Pressing a preset fades every colour across to the new look over about a second.
@@ -84,7 +92,7 @@ Halfway through the fade from Day to Sunset:
 
 ## Controls
 
-The controls sit in the lower right as plain white lines: solid up to the current value, then blending quickly into a faint line that barely wobbles. Drag along a line, or focus it and use the arrow keys.
+The controls sit in the lower right: the sky presets along the top, then plain white lines that reach left to line up under the first preset, solid up to the current value and blending quickly into a faint line that barely wobbles, then a row of buttons. Drag along a line, or focus it and use the arrow keys.
 
 ![The line controls](docs/screenshots/11-controls.jpg)
 
@@ -98,6 +106,7 @@ The controls sit in the lower right as plain white lines: solid up to the curren
 | Speed | How fast all the water moves (also slows the simulation) | 0.1 – 1.5 | 0.6 |
 | Halo | Strength of the glow around the big moon (on top of what the sky sets) | 0 – 2 | 1 |
 | Glow | Strength of the bloom | 0 – 2 | 0.6 |
+| In front / Behind | Moon in the water, or up in the sky behind the surface | | In front |
 | Bloom on/off | Turns the bloom off entirely | | on |
 | Pause | Freezes the water and the moon | | |
 
@@ -113,6 +122,7 @@ Every control can be set from the address, which is how the screenshots here wer
 ?wind=0.1&waves=0.3&swell=0.3     calm water
 ?wind=1.2&waves=1.2&swell=1.2     rough water
 ?speed=0.3                        slow motion
+?moon=behind                      start with the moon behind the water
 ?halo=0                           no glow around the moon
 ?bloom=0                          bloom off
 ?turn=140                         turn the moon 140° to start
