@@ -54,6 +54,34 @@ Drag the moon to spin it. Let go mid-drag to throw it; press on it while it's tu
 
 ![A clean frame](docs/screenshots/09-clean.jpg)
 
+### The sky
+
+The Sky control slides through five times of day. Every colour in the scene comes from one palette: the water on both sides, the light falling from above, the sky seen through the surface and the glow around the moon in it, the reflection and its bloom, the halo, and the moon's own tint and shadow. Between two looks, every colour is blended, so the control shifts smoothly from one to the next.
+
+**Day:** a bright blue sky through the surface, teal water, and a moon washed almost white.
+
+![Day](docs/screenshots/12-sky-day.jpg)
+
+**Sunset:** an orange sky fading to violet overhead, warm dark water, a warm moon and a golden reflection.
+
+![Sunset](docs/screenshots/13-sky-sunset.jpg)
+
+**Night:** the default.
+
+![Night](docs/screenshots/14-sky-night.jpg)
+
+**Midnight:** near-black water and sky, a dimmer moon, and a cold, faint glow.
+
+![Midnight](docs/screenshots/15-sky-midnight.jpg)
+
+**Eclipse:** a blood moon. The moon turns copper-red, and its reflection glows orange against dark red water.
+
+![Eclipse](docs/screenshots/16-sky-eclipse.jpg)
+
+Halfway between Day and Sunset:
+
+![Between day and sunset](docs/screenshots/17-sky-between.jpg)
+
 ## Controls
 
 The controls sit in the lower right as plain white lines: solid up to the current value, then blending quickly into a faint line that barely wobbles. Drag along a line, or focus it and use the arrow keys.
@@ -62,6 +90,7 @@ The controls sit in the lower right as plain white lines: solid up to the curren
 
 | Control | What it does | Range | Default |
 |---|---|---|---|
+| Sky | Time of day: Day, Sunset, Night, Midnight, Eclipse, blended in between | 0 – 4 | 2 (Night) |
 | Wind | Strength of the simulated wind ripples | 0 – 1.2 | 0.45 |
 | Warp | How much the height grid is bent | 0 – 2 | 1 |
 | Waves | Strength of the broad wind sea | 0 – 1.2 | 0.9 |
@@ -78,6 +107,8 @@ Tap the water to drop a ripple, or drag across it to stir.
 Every control can be set from the address, which is how the screenshots here were made:
 
 ```
+?sky=sunset                       a look by name (day, sunset, night, midnight, eclipse)
+?sky=0.5                          or any point between them (0 = day ... 4 = eclipse)
 ?wind=0.1&waves=0.3&swell=0.3     calm water
 ?wind=1.2&waves=1.2&swell=1.2     rough water
 ?speed=0.3                        slow motion
@@ -86,9 +117,9 @@ Every control can be set from the address, which is how the screenshots here wer
 ?ui=0                             hide the controls
 ```
 
-It works on phones too:
+It works on phones too (here at sunset):
 
-<img src="docs/screenshots/10-phone.jpg" alt="The scene on a phone" width="320">
+<img src="docs/screenshots/10-phone.jpg" alt="The scene on a phone at sunset" width="320">
 
 ## Running it
 

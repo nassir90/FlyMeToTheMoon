@@ -48,6 +48,7 @@
 <canvas id="scene" tabindex="0" aria-label="Animated 3D scene: a full moon seen from under a simulated water surface. Drag the moon to spin it; tap the water to drop a ripple."></canvas>
 
 <div class="controls" id="controls">
+  <label for="sky"><span class="squeeze">Sky</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="sky" type="range" min="0" max="4" step="0.01" value="2" aria-valuetext="Night"></div>
   <label for="wind"><span class="squeeze">Wind</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="wind" type="range" min="0" max="1.2" step="0.01" value="0.45"></div>
   <label for="warp"><span class="squeeze">Warp</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="warp" type="range" min="0" max="2" step="0.01" value="1"></div>
   <label for="chop"><span class="squeeze">Waves</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="chop" type="range" min="0" max="1.2" step="0.01" value="0.9"></div>
@@ -101,6 +102,11 @@
     uChopMode: { value: 1 },                      // 0: isotropic chop, 1: broad directional wind sea
     uLimit: { value: 0.18 },                      // soft cap on surface tilt (0 = off)
     uScale: { value: 1 },
+    // palette, set by the Sky control (see SKIES below)
+    uDeepL: { value: new THREE.Vector3() }, uDeepR: { value: new THREE.Vector3() }, uUpLight: { value: new THREE.Vector3() },
+    uSkyLow: { value: new THREE.Vector3() }, uSkyHigh: { value: new THREE.Vector3() },
+    uGlowA: { value: new THREE.Vector3() }, uGlowB: { value: new THREE.Vector3() },
+    uHalo: { value: new THREE.Vector3() }, uImage: { value: new THREE.Vector3() }, uBloomTint: { value: new THREE.Vector3() },
   };
 
   // =====================================================================================
@@ -200,6 +206,7 @@
   // =====================================================================================
   const CAM = { FS: 0.25, ALPHA: 0.648, DEPTH: 3.0, TILE: 20.0 };
   const WATER = `
+      uniform vec3 uDeepL, uDeepR, uUpLight, uSkyLow, uSkyHigh, uGlowA, uGlowB, uHalo, uImage, uBloomTint;
       uniform sampler2D uSim; uniform float uTime, uSwell, uChop, uWarp, uChopMode, uLimit, uScale; uniform vec2 uMoon; uniform float uMoonR;
       const float FS = ${CAM.FS}, ALPHA = ${CAM.ALPHA}, DEPTH = ${CAM.DEPTH.toFixed(1)}, TILE = ${CAM.TILE.toFixed(1)};
       const float SIM_N = ${SIM.toFixed(1)};
@@ -326,8 +333,8 @@
       // below and the surface's mirror of it, so the two meet without a seam.
       // u: horizontal position across the view (0 left, 1 right), for the palette (#191313 left -> #1a1922 right).
       vec3 underwater(vec3 dir, float u){
-        vec3 c = mix(vec3(0.098,0.075,0.075), vec3(0.102,0.098,0.133), smoothstep(0.4, 0.95, u));
-        c += vec3(0.0, 0.03, 0.06) * smoothstep(-0.25, 0.6, dir.y);     // light from above, scattered
+        vec3 c = mix(uDeepL, uDeepR, smoothstep(0.4, 0.95, u));
+        c += uUpLight * smoothstep(-0.25, 0.6, dir.y);                    // light from above, scattered
         // faint, slow drifts of light in the water, barely moving
         vec2 q = vec2(dir.x/max(dir.z, 0.2)*2.5, dir.y*3.0);
         float n = vnoise(q + vec2(uTime*0.03, -uTime*0.02)) + 0.5*vnoise(q*2.1 - vec2(uTime*0.02, 0.0));
@@ -349,9 +356,9 @@
         float T = 1.0 - F;
         // night sky through the surface: #122238 near the horizon to #295075 high up
         float el = clamp(r.y, 0.0, 1.0);
-        vec3 sky = mix(vec3(0.07,0.13,0.22), vec3(0.13,0.25,0.40), smoothstep(0.05, 0.9, el));
+        vec3 sky = mix(uSkyLow, uSkyHigh, smoothstep(0.05, 0.9, el));
         float c = dot(r, SKY_MOON);
-        sky += vec3(0.16,0.28,0.38) * exp((c - 1.0)/0.03) + vec3(0.25,0.35,0.45) * exp((c - 1.0)/0.006);
+        sky += uGlowA * exp((c - 1.0)/0.03) + uGlowB * exp((c - 1.0)/0.006);
         float disc = smoothstep(MOON_COS - 0.0012, MOON_COS + 0.0012, c);
         vec3 col = T*sky + F*deepR;
         // crests and troughs of the broad waves focus and spread the light: long bands that move with them
@@ -369,7 +376,7 @@
         vec2 s = screenPos();
         vec3 col = lookUp(s).rgb;
         // halo: sharp edge, then a short exponential fall-off (#37586c at 1.03R to background by ~1.45R)
-        col += vec3(0.118,0.239,0.282) * exp(-max(length(s) - 0.99, 0.0)/0.19);
+        col += uHalo * exp(-max(length(s) - 0.99, 0.0)/0.19);
         gl_FragColor = vec4(col, 1.0);
       }`
   })));
@@ -390,6 +397,9 @@
     uMap: { value: solid(0x6f, 0x9b, 0x9a) },
     uNormal: { value: solid(128, 128, 255) },
     uLight: { value: new THREE.Vector3(0.455, 0.455, 0.766).normalize() },
+    uMoonMul: { value: new THREE.Vector3(1, 1, 1) },      // tint
+    uMoonMix: { value: new THREE.Vector4(1, 1, 1, 0) },   // colour to wash toward, and how far
+    uMoonDark: { value: new THREE.Vector3() },            // colour of the shadowed crescent
   };
   const loader = new THREE.TextureLoader();
   function loadInto(key, url) {
@@ -416,7 +426,7 @@
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
         }`,
       fragmentShader: `
-        uniform sampler2D uMap, uNormal; uniform vec3 uLight;
+        uniform sampler2D uMap, uNormal; uniform vec3 uLight, uMoonMul, uMoonDark; uniform vec4 uMoonMix;
         varying vec2 vUv; varying vec3 vN; varying vec3 vT;
         void main(){
           vec3 albedo = texture2D(uMap, vUv, 1.6).rgb;
@@ -429,11 +439,12 @@
           float ng = dot(N, uLight), nm = dot(n, uLight);
           float w = 1.0 - smoothstep(0.0, 0.3, abs(ng));
           float lit = smoothstep(-0.01, 0.06, mix(ng, nm, w));
-          vec3 dark = albedo*0.45 + vec3(0.03,0.08,0.11);
+          vec3 dark = albedo*0.45 + uMoonDark;
           vec3 day = albedo * mix(0.96, 1.05, smoothstep(0.2, 1.0, ng));
           vec3 col = mix(dark, day, lit);
           col *= mix(0.85, 1.0, smoothstep(0.0, 0.15, N.z));
           col += vec3(0.03,0.035,0.05) * smoothstep(0.45, 0.95, N.y) * lit;
+          col = mix(col*uMoonMul, uMoonMix.rgb, uMoonMix.a);
           gl_FragColor = vec4(col, smoothstep(0.0, 0.16, N.z));
         }`
     })
@@ -455,7 +466,7 @@
         vec2 s = screenPos();
         if (viewRay(s).y < 0.03) { gl_FragColor = vec4(0.0); return; }
         float m = lookUp(s).w;
-        gl_FragColor = vec4(vec3(0.95, 0.97, 1.0), clamp(m*1.15, 0.0, 1.0));
+        gl_FragColor = vec4(uImage, clamp(m*1.15, 0.0, 1.0));
       }`
   })));
 
@@ -475,7 +486,7 @@
           vec2 sp = (base + o - uMoon) / uMoonR; sp.y = -sp.y;
           if (viewRay(sp).y >= 0.03) acc += lookUp(sp).w;
         }
-        gl_FragColor = vec4(vec3(0.8,0.87,0.95) * acc * 0.25 * uGlow, 1.0);
+        gl_FragColor = vec4(uBloomTint * acc * 0.25 * uGlow, 1.0);
       }`
   })));
   const blurMat = new THREE.ShaderMaterial({
@@ -738,10 +749,64 @@
     }
   }
 
-  // Settings from the address, e.g. ?waves=1.2&swell=1.2&speed=0.3&bloom=0&turn=90&ui=0
+  // ---------------------------------------------------------------------------------------
+  // Sky: one palette per time of day. The control slides through them in order and blends
+  // every colour between the two nearest, so it shifts smoothly from one look to the next.
+  // ---------------------------------------------------------------------------------------
+  const SKIES = [
+    { name: 'Day',
+      deepL: [0.09,0.19,0.25], deepR: [0.10,0.21,0.29], upLight: [0.05,0.13,0.16],
+      skyLow: [0.50,0.70,0.88], skyHigh: [0.28,0.52,0.85], glowA: [0.10,0.10,0.08], glowB: [0.18,0.18,0.15],
+      halo: [0.16,0.30,0.34], image: [1.0,1.0,1.0], bloom: [0.85,0.92,1.0],
+      moonMul: [1,1,1], moonMix: [0.93,0.95,0.96,0.62], moonDark: [0.20,0.30,0.36] },
+    { name: 'Sunset',
+      deepL: [0.14,0.07,0.05], deepR: [0.10,0.06,0.08], upLight: [0.10,0.05,0.02],
+      skyLow: [0.92,0.45,0.18], skyHigh: [0.40,0.24,0.36], glowA: [0.30,0.16,0.06], glowB: [0.40,0.28,0.14],
+      halo: [0.30,0.16,0.10], image: [1.0,0.86,0.62], bloom: [1.0,0.72,0.45],
+      moonMul: [1.2,0.9,0.72], moonMix: [0.98,0.78,0.58,0.45], moonDark: [0.14,0.06,0.05] },
+    { name: 'Night',
+      deepL: [0.098,0.075,0.075], deepR: [0.102,0.098,0.133], upLight: [0.0,0.03,0.06],
+      skyLow: [0.07,0.13,0.22], skyHigh: [0.13,0.25,0.40], glowA: [0.16,0.28,0.38], glowB: [0.25,0.35,0.45],
+      halo: [0.118,0.239,0.282], image: [0.95,0.97,1.0], bloom: [0.8,0.87,0.95],
+      moonMul: [1,1,1], moonMix: [1,1,1,0], moonDark: [0.03,0.08,0.11] },
+    { name: 'Midnight',
+      deepL: [0.025,0.02,0.025], deepR: [0.025,0.028,0.04], upLight: [0.0,0.012,0.025],
+      skyLow: [0.02,0.035,0.06], skyHigh: [0.035,0.07,0.13], glowA: [0.08,0.13,0.19], glowB: [0.15,0.2,0.27],
+      halo: [0.05,0.10,0.12], image: [0.9,0.94,1.0], bloom: [0.55,0.65,0.8],
+      moonMul: [0.78,0.82,0.88], moonMix: [0,0,0,0], moonDark: [0.01,0.03,0.045] },
+    { name: 'Eclipse',
+      deepL: [0.045,0.018,0.018], deepR: [0.04,0.02,0.026], upLight: [0.03,0.004,0.0],
+      skyLow: [0.04,0.025,0.03], skyHigh: [0.05,0.03,0.05], glowA: [0.22,0.06,0.03], glowB: [0.32,0.10,0.05],
+      halo: [0.26,0.06,0.03], image: [0.98,0.50,0.28], bloom: [0.85,0.32,0.14],
+      moonMul: [1.30,0.48,0.32], moonMix: [0,0,0,0], moonDark: [0.05,0.01,0.01] },
+  ];
+  const skyInput = document.getElementById('sky');
+  function applySky(v) {
+    v = Math.min(SKIES.length - 1, Math.max(0, v));
+    const i = Math.min(SKIES.length - 2, Math.floor(v)), f = v - i, A = SKIES[i], B = SKIES[i + 1];
+    const mixv = k => A[k].map((a, n) => a + (B[k][n] - a)*f);
+    const set = (u, k) => u.value.fromArray(mixv(k));
+    set(uniforms.uDeepL, 'deepL'); set(uniforms.uDeepR, 'deepR'); set(uniforms.uUpLight, 'upLight');
+    set(uniforms.uSkyLow, 'skyLow'); set(uniforms.uSkyHigh, 'skyHigh');
+    set(uniforms.uGlowA, 'glowA'); set(uniforms.uGlowB, 'glowB');
+    set(uniforms.uHalo, 'halo'); set(uniforms.uImage, 'image'); set(uniforms.uBloomTint, 'bloom');
+    set(moonUniforms.uMoonMul, 'moonMul'); set(moonUniforms.uMoonMix, 'moonMix'); set(moonUniforms.uMoonDark, 'moonDark');
+    const d = mixv('deepL');
+    CLEAR.setRGB(d[0], d[1], d[2]); renderer.setClearColor(CLEAR, 1);
+    document.body.style.background = '#' + CLEAR.getHexString();
+    skyInput.setAttribute('aria-valuetext', SKIES[Math.round(v)].name);
+  }
+  skyInput.addEventListener('input', e => applySky(parseFloat(e.target.value)));
+  applySky(parseFloat(skyInput.value));
+
+  // Settings from the address, e.g. ?sky=sunset&waves=1.2&swell=1.2&speed=0.3&bloom=0&turn=90&ui=0
   const q = new URLSearchParams(location.search);
   for (const [key, id] of [['wind','wind'], ['warp','warp'], ['waves','chop'], ['swell','swell'], ['speed','speed'], ['glow','glow']]) {
     if (q.has(key)) { const el = document.getElementById(id); el.value = q.get(key); el.dispatchEvent(new Event('input')); }
+  }
+  if (q.has('sky')) {
+    const v = q.get('sky'), named = SKIES.findIndex(k => k.name.toLowerCase() === v.toLowerCase());
+    skyInput.value = named >= 0 ? named : parseFloat(v) || 0; skyInput.dispatchEvent(new Event('input'));
   }
   if (q.get('bloom') === '0') bloomBtn.click();
   if (q.has('turn')) rotateBy(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(parseFloat(q.get('turn')) || 0));
