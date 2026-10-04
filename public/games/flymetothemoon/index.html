@@ -1,0 +1,744 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="A full moon seen from under a simulated water surface.">
+<title>Fly Me to the Moon</title>
+<style>
+  /* Layout: one full-bleed WebGL scene; a column of line controls in the lower right, no panel. Single dark look by design. */
+  :root {
+    --night: #191313;
+    --ink: #ffffff;
+    --ink-faint: rgba(255, 255, 255, 0.35);
+    --font-label: "Times New Roman", Times, "Liberation Serif", serif;
+    color-scheme: dark;
+  }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--night); color: var(--ink); overflow: hidden; font-family: var(--font-label); }
+  #scene { position: fixed; inset: 0; display: block; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
+  #scene.over-moon { cursor: grab; }
+  #scene.grabbing { cursor: grabbing; }
+  .controls {
+    position: fixed; right: 20px; bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+    display: grid; grid-template-columns: auto clamp(110px, 18vw, 170px); column-gap: 14px; row-gap: 4px; align-items: center;
+    font-family: var(--font-label); font-size: 15px; color: var(--ink);
+    text-transform: uppercase; letter-spacing: 0.04em; text-shadow: 0 0 6px rgba(0, 0, 0, 0.55);
+  }
+  .controls.hidden-ui { display: none; }
+  /* compressed capitals: Times New Roman has no condensed cut, so the words are narrowed */
+  .squeeze { display: inline-block; transform: scaleX(0.72); transform-origin: right center; }
+  .controls label { justify-self: end; cursor: pointer; }
+  .line { position: relative; height: 22px; }
+  .line canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .line input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: ew-resize; }
+  .line:focus-within { outline: 1px solid var(--ink-faint); outline-offset: 2px; }
+  .buttons { grid-column: 1 / -1; justify-self: end; display: flex; gap: 6px; margin-top: 4px; }
+  .controls button {
+    font: inherit; letter-spacing: inherit; text-transform: inherit; text-shadow: inherit; color: var(--ink);
+    background: none; border: 0; padding: 2px 0; cursor: pointer;
+  }
+  .controls button:hover { opacity: 0.7; }
+  :focus-visible { outline: 1px solid var(--ink); outline-offset: 3px; }
+  [hidden] { display: none !important; }
+  .err { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; text-align: center; color: var(--ink-faint); text-transform: uppercase; }
+</style>
+</head>
+<body>
+<canvas id="scene" tabindex="0" aria-label="Animated 3D scene: a full moon seen from under a simulated water surface. Drag the moon to spin it; tap the water to drop a ripple."></canvas>
+
+<div class="controls" id="controls">
+  <label for="wind"><span class="squeeze">Wind</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="wind" type="range" min="0" max="1.2" step="0.01" value="0.45"></div>
+  <label for="warp"><span class="squeeze">Warp</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="warp" type="range" min="0" max="2" step="0.01" value="1"></div>
+  <label for="chop"><span class="squeeze">Waves</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="chop" type="range" min="0" max="1.2" step="0.01" value="0.9"></div>
+  <label for="swell"><span class="squeeze">Swell</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="swell" type="range" min="0" max="1.2" step="0.01" value="0.8"></div>
+  <label for="speed"><span class="squeeze">Speed</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="speed" type="range" min="0.1" max="1.5" step="0.01" value="0.6"></div>
+  <label for="glow"><span class="squeeze">Glow</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="glow" type="range" min="0" max="2" step="0.01" value="0.6"></div>
+  <div class="buttons">
+    <button id="bloom" type="button" aria-pressed="true"><span class="squeeze">Bloom on</span></button>
+    <button id="pause" type="button"><span class="squeeze">Pause</span></button>
+  </div>
+</div>
+
+<div class="err" id="err" hidden>This scene needs WebGL 2, which isn't available in this browser.</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function () {
+  const canvas = document.getElementById('scene');
+  let renderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  } catch (e) { renderer = null; }
+  if (!renderer || !renderer.capabilities.isWebGL2) {
+    document.getElementById('err').hidden = false;
+    return;
+  }
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+  renderer.autoClear = false;
+  const CLEAR = new THREE.Color(0x191313);
+  renderer.setClearColor(CLEAR, 1);
+
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const speed = reduceMotion ? 0.35 : 1;
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 200);
+  camera.position.set(0, 0, 14);
+  const flatCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  const flatVS = `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
+  const quad = mat => new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat);
+
+  const uniforms = {
+    uTime: { value: 0 },
+    uRes: { value: new THREE.Vector2(1, 1) },
+    uMoon: { value: new THREE.Vector2(0, 0) },   // moon centre in device pixels (bottom-left origin)
+    uMoonR: { value: 100 },                      // moon radius in device pixels
+    uSim: { value: null },                       // simulated height field
+    uSwell: { value: 0.8 },
+    uChop: { value: 0.9 },
+    uWarp: { value: 1 },
+    uChopMode: { value: 1 },                      // 0: isotropic chop, 1: broad directional wind sea
+    uLimit: { value: 0.18 },                      // soft cap on surface tilt (0 = off)
+    uScale: { value: 1 },
+  };
+
+  // =====================================================================================
+  // 1. Water surface simulation
+  // A 512x512 height field on the GPU (20 x 20 units, much wider than the patch of surface in view), stepped with the discrete wave equation: each cell is pulled
+  // toward the average of its neighbours, so ripples travel, spread, interfere and slowly die away.
+  // The grid wraps around, so the surface tiles without seams. Wind is a slowly drifting random
+  // pressure on the surface; taps drop a ripple where they land.
+  // =====================================================================================
+  const SIM = 512;
+  const simOpts = { type: THREE.HalfFloatType, format: THREE.RGBAFormat, depthBuffer: false,
+                    minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
+                    wrapS: THREE.RepeatWrapping, wrapT: THREE.RepeatWrapping };
+  const simRT = [new THREE.WebGLRenderTarget(SIM, SIM, simOpts), new THREE.WebGLRenderTarget(SIM, SIM, simOpts)];
+  let simCur = 0;
+  const simMat = new THREE.ShaderMaterial({
+    uniforms: { tPrev: { value: null }, uTime: { value: 0 }, uWind: { value: 0.45 }, uDrop: { value: new THREE.Vector4(0, 0, 0, 0) } },
+    depthTest: false, depthWrite: false,
+    vertexShader: flatVS,
+    fragmentShader: `
+      uniform sampler2D tPrev; uniform float uTime, uWind; uniform vec4 uDrop; varying vec2 vUv;
+      const float N = ${SIM.toFixed(1)};
+      // value noise that repeats every 'per' cells, so the wind tiles with the grid
+      float h21(vec2 p){ p = fract(p*vec2(123.34, 456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
+      float pnoise(vec2 p, float per){
+        vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
+        vec2 a = mod(i, per), b = mod(i + 1.0, per);
+        return mix(mix(h21(a), h21(vec2(b.x, a.y)), f.x), mix(h21(vec2(a.x, b.y)), h21(b), f.x), f.y);
+      }
+      const float GUST_STEPS = 6.0;
+      // one wind pattern: six plane waves of pressure in random directions and lengths
+      // (whole numbers of cycles per tile, so it wraps seamlessly)
+      float gustPattern(float id){
+        float g = 0.0;
+        for (int i = 0; i < 6; i++) {
+          vec3 h = fract(sin(vec3(id*1.37 + float(i)*17.1, id*0.71 + float(i)*5.3, id*2.11 + float(i)*9.7))
+                         * vec3(43758.5453, 22578.1459, 19642.3490));
+          float ang = h.x*6.2831, mag = mix(28.0, 75.0, h.y);
+          vec2 k = floor(vec2(cos(ang), sin(ang))*mag + 0.5);
+          g += cos(6.2831*dot(k, vUv) + h.z*6.2831);
+        }
+        return g;
+      }
+      void main(){
+        vec4 info = texture2D(tPrev, vUv);
+        vec2 dx = vec2(1.0/N, 0.0), dy = vec2(0.0, 1.0/N);
+        vec4 nb = (texture2D(tPrev, vUv - dx) + texture2D(tPrev, vUv + dx) +
+                   texture2D(tPrev, vUv - dy) + texture2D(tPrev, vUv + dy)) * 0.25;
+        // wave equation: accelerate toward the neighbours. A coupling of 1.8 (not the 2.0 limit)
+        // keeps every mode stable, including the grid-scale one.
+        info.g += (nb.r - info.r) * 1.8;
+        info.g -= info.r * 0.003;                  // restoring pull toward level, so long waves can't drift
+        info.g *= 0.99;                            // damping: a tap's ripples fade over a couple of seconds
+        info.g = mix(info.g, nb.g, 0.15);          // viscosity on the motion: damps grid-scale ringing
+        // wind: every step, six plane waves of pressure in random directions and lengths (whole
+        // numbers of cycles per tile, so it still wraps seamlessly). No lattice, no preferred axis:
+        // over many steps it adds up to gusts that are the same in every direction, and because it
+        // changes faster than the waves can follow, the wave equation turns it into a steady chop.
+        // Each pattern lasts a few steps and blends smoothly into the next, so the wind sets off
+        // slower, longer ripples instead of a stream of twitchy short-lived ones.
+        float T = uTime*120.0/GUST_STEPS;
+        float gust = mix(gustPattern(floor(T)), gustPattern(floor(T) + 1.0), smoothstep(0.0, 1.0, fract(T)));
+        info.g += gust * 0.00008 * uWind;
+        info.r += info.g;
+        // a tap: a smooth dent that springs back and rings outward
+        if (uDrop.z > 0.0) {
+          vec2 d = vUv - uDrop.xy; d -= floor(d + 0.5);          // shortest way round the wrapped grid
+          float r = length(d) / uDrop.w;
+          if (r < 1.0) info.r -= uDrop.z * (0.5 + 0.5*cos(r*3.14159));
+        }
+        gl_FragColor = info;
+      }`
+  });
+  const simScene = new THREE.Scene(); simScene.add(quad(simMat));
+  const NO_DROP = new THREE.Vector4(0, 0, 0, 0);
+  const drops = [];
+  function simStep() {
+    simMat.uniforms.tPrev.value = simRT[simCur].texture;
+    simMat.uniforms.uDrop.value.copy(drops.length ? drops.shift() : NO_DROP);
+    renderer.setRenderTarget(simRT[1 - simCur]); renderer.render(simScene, flatCam);
+    simCur = 1 - simCur;
+  }
+  // start flat
+  renderer.setClearColor(0x000000, 0);
+  for (const rt of simRT) { renderer.setRenderTarget(rt); renderer.clear(); }
+  renderer.setRenderTarget(null);
+  renderer.setClearColor(CLEAR, 1);
+
+  // =====================================================================================
+  // 2. Looking up through it
+  // For each pixel, a ray leaves an underwater camera (3 units deep, tilted 37 degrees up) and hits
+  // the surface. The surface normal there comes from the simulation plus a few long swells that
+  // obey the deep-water dispersion relation (omega^2 = g k: longer waves travel faster). The ray is
+  // bent out through the surface with Snell's law (n = 1.333) and weighted by Fresnel; past the
+  // critical angle it reflects back down into the dark water instead. In the sky above sits a moon;
+  // its broken image in the surface, and every glint around it, is wherever a ray bends onto it.
+  // =====================================================================================
+  const CAM = { FS: 0.25, ALPHA: 0.648, DEPTH: 3.0, TILE: 20.0 };
+  const WATER = `
+      uniform sampler2D uSim; uniform float uTime, uSwell, uChop, uWarp, uChopMode, uLimit, uScale; uniform vec2 uMoon; uniform float uMoonR;
+      const float FS = ${CAM.FS}, ALPHA = ${CAM.ALPHA}, DEPTH = ${CAM.DEPTH.toFixed(1)}, TILE = ${CAM.TILE.toFixed(1)};
+      const float SIM_N = ${SIM.toFixed(1)};
+      // the moon in the sky: elevation ~35 degrees straight ahead, drawn large (stylised), plus its glow
+      const vec3 SKY_MOON = vec3(0.0, 0.574, 0.819);
+      const float MOON_COS = 0.995;        // angular radius ~5.7 degrees
+      vec2 screenPos(){ vec2 s = (gl_FragCoord.xy/uScale - uMoon) / uMoonR; return vec2(s.x, -s.y); }
+      vec3 viewRay(vec2 s){
+        vec3 d = normalize(vec3(s.x*FS, -s.y*FS, 1.0));
+        float ca = cos(ALPHA), sa = sin(ALPHA);
+        return vec3(d.x, d.y*ca + d.z*sa, -d.y*sa + d.z*ca);
+      }
+      // one long swell: x height, yz slope
+      vec3 swell(vec2 x, float ang, float lambda, float steep, float ph){
+        float k = 6.2831/lambda;
+        vec2 kv = k*vec2(cos(ang), sin(ang));
+        float w = sqrt(9.81*k)*0.45;                       // dispersion (time slowed for a calm night)
+        float a = steep/k;
+        float th = dot(kv, x) - w*uTime + ph;
+        return vec3(a*sin(th), a*cos(th)*kv);
+      }
+      float h11(float n){ return fract(sin(n*12.9898 + 4.1414)*43758.5453); }
+      // Wind waves. Mode 0: twelve short waves spread evenly over every direction (the old chop;
+      // they interfere into a faint repeating pattern). Mode 1: a wind sea, waves travelling within
+      // about +-30 degrees of one wind direction with irregular lengths and phases: ten broad waves
+      // (0.8-3.2 units) whose long crests roll across the water, plus six short ones for sparkle.
+      vec3 chop(vec2 x, float dist){
+        vec2 g = vec2(0.0); float curv = 0.0;
+        if (uChopMode < 0.5) {
+          float lambda = 0.62;
+          for (int i = 0; i < 12; i++) {
+            float fi = float(i);
+            float ang = 0.35 + fi*2.39996;
+            float k = 6.2831/lambda;
+            vec2 kv = k*vec2(cos(ang), sin(ang)*0.8);
+            float w = sqrt(9.81*k)*0.45;
+            float th = dot(kv, x) - w*uTime + fi*1.7;
+            g += 0.05*cos(th)*kv/k;
+            lambda *= 0.86;
+          }
+          return vec3(g / (1.0 + dist*0.18), 0.0);
+        }
+        for (int i = 0; i < 16; i++) {
+          float fi = float(i);
+          float broad = i < 10 ? 1.0 : 0.0;
+          float ang = 1.5708 + (h11(fi) - 0.5)*1.05;                 // around the wind, heading away from us
+          float lambda = broad > 0.5 ? mix(0.8, 3.2, h11(fi + 20.0)) : mix(0.25, 0.6, h11(fi + 20.0));
+          float steep = broad > 0.5 ? 0.028*(0.6 + 0.8*h11(fi + 40.0)) : 0.016*(0.6 + 0.8*h11(fi + 40.0));
+          float k = 6.2831/lambda;
+          vec2 kv = k*vec2(cos(ang), sin(ang));
+          float w = sqrt(9.81*k)*0.45;
+          float th = dot(kv, x) - w*uTime + h11(fi + 60.0)*6.2831;
+          // short waves fade with distance faster than broad ones
+          float fadeW = 1.0 / (1.0 + dist*(broad > 0.5 ? 0.05 : 0.2));
+          g += steep*cos(th)*kv/k * fadeW;
+          curv -= steep*k*sin(th) * fadeW * (broad > 0.5 ? 1.0 : 0.25);   // crests vs troughs, mostly the broad waves
+        }
+        return vec3(g, curv);
+      }
+      // surface slope at a point: simulation + swells + chop. dist fades ripples too fine to resolve far away.
+      // Smooth cubic B-spline read of the height grid (four linear reads). Unlike plain linear
+      // blending, its slopes change smoothly across cells, so the grid never shows in the light.
+      vec4 bsw(float v){
+        vec4 n = vec4(1.0, 2.0, 3.0, 4.0) - v; vec4 c = n*n*n;
+        float x = c.x, y = c.y - 4.0*c.x, z = c.z - 4.0*c.y + 6.0*c.x;
+        return vec4(x, y, z, 6.0 - x - y - z) / 6.0;
+      }
+      float heightAt(vec2 uv){
+        uv = uv*SIM_N - 0.5;
+        vec2 f = fract(uv); uv -= f;
+        vec4 xc = bsw(f.x), yc = bsw(f.y);
+        vec4 c = uv.xxyy + vec2(-0.5, 1.5).xyxy;
+        vec4 sm = vec4(xc.xz + xc.yw, yc.xz + yc.yw);
+        vec4 o = (c + vec4(xc.yw, yc.yw)/sm) / SIM_N;
+        float s0 = texture2D(uSim, o.xz).r, s1 = texture2D(uSim, o.yz).r;
+        float s2 = texture2D(uSim, o.xw).r, s3 = texture2D(uSim, o.yw).r;
+        float sx = sm.x/(sm.x + sm.y), sy = sm.z/(sm.z + sm.w);
+        return mix(mix(s3, s2, sx), mix(s1, s0, sx), sy);
+      }
+      // A non-uniform lattice: the surface coordinates are bent by a slow, smooth warp before the
+      // height grid is read, then turned 27 degrees, so the grid is stretched and curved differently
+      // everywhere and never lines up with the screen. (The same warp lives in surfaceUV() in JS.)
+      const float ROT_C = 0.8916, ROT_S = 0.4529;
+      vec2 warpXZ(vec2 x){
+        vec2 w = 0.35*vec2(sin(dot(x, vec2(0.61, 0.23)) + uTime*0.11 + 1.3), cos(dot(x, vec2(-0.19, 0.57)) - uTime*0.09))
+               + 0.18*vec2(sin(dot(x, vec2(-0.93, 1.21)) - uTime*0.17 + 4.1), sin(dot(x, vec2(1.37, 0.41)) + uTime*0.13 + 2.2))
+               + 0.09*vec2(cos(dot(x, vec2(2.3, -1.7)) + uTime*0.23), sin(dot(x, vec2(1.1, 2.6)) - uTime*0.21 + 0.7));
+        return x + w*uWarp;
+      }
+      vec3 surfaceSlope(vec2 xz, float dist){
+        vec2 wx = warpXZ(xz);
+        vec2 uv = vec2(ROT_C*wx.x - ROT_S*wx.y, ROT_S*wx.x + ROT_C*wx.y) / TILE;
+        float e = 1.5/SIM_N;
+        float hc = heightAt(uv);
+        float hl = heightAt(uv - vec2(e, 0.0)), hr = heightAt(uv + vec2(e, 0.0));
+        float hd = heightAt(uv - vec2(0.0, e)), hu = heightAt(uv + vec2(0.0, e));
+        float fade = 1.0 / (1.0 + dist*0.1);
+        const float ROUGH = 2.0;                           // how tall the simulated ripples are
+        vec2 gs = vec2(hr - hl, hu - hd) / (2.0*e*TILE) * fade * ROUGH;
+        vec2 g = vec2(ROT_C*gs.x + ROT_S*gs.y, -ROT_S*gs.x + ROT_C*gs.y);   // back out of the turned grid
+        float lap = (hl + hr + hu + hd - 4.0*hc) * fade * ROUGH;   // curvature: crests vs troughs
+        vec3 sw = swell(xz, 0.35, 7.0, 0.015, 0.0) + swell(xz, -0.6, 4.3, 0.02, 1.7)
+                + swell(xz, 1.25, 2.6, 0.026, 4.1) + swell(xz, 2.3, 1.6, 0.024, 2.2);
+        vec3 ch = chop(wx, dist) * uChop;                  // the waves ride the same warp
+        g += sw.yz * uSwell + ch.xy;
+        // Soft limit on the total tilt: gentle slopes pass unchanged, steep ones are compressed
+        // smoothly toward uLimit, so no combination of settings can throw the surface into extremes.
+        if (uLimit > 0.0) {
+          float m = length(g);
+          float e2 = exp(-2.0*m/uLimit);
+          g *= m > 1e-5 ? uLimit*(1.0 - e2)/(1.0 + e2)/m : 1.0;
+        }
+        return vec3(g, ch.z);                              // curvature of the broad waves, for the light bands
+      }
+      // x,y,z: colour of the water seen along this pixel, w: brightness of the moon's image here
+      float vnoise(vec2 p){
+        vec2 i = floor(p), f = fract(p); f = f*f*(3.0 - 2.0*f);
+        vec2 h = vec2(dot(i, vec2(127.1, 311.7)), dot(i + vec2(1.0, 0.0), vec2(127.1, 311.7)));
+        vec2 h2 = vec2(dot(i + vec2(0.0, 1.0), vec2(127.1, 311.7)), dot(i + 1.0, vec2(127.1, 311.7)));
+        vec4 r = fract(sin(vec4(h, h2))*43758.5453);
+        return mix(mix(r.x, r.y, f.x), mix(r.z, r.w, f.x), f.y);
+      }
+      // The water itself, looked through in any direction: one colour field shared by the open water
+      // below and the surface's mirror of it, so the two meet without a seam.
+      // u: horizontal position across the view (0 left, 1 right), for the palette (#191313 left -> #1a1922 right).
+      vec3 underwater(vec3 dir, float u){
+        vec3 c = mix(vec3(0.098,0.075,0.075), vec3(0.102,0.098,0.133), smoothstep(0.4, 0.95, u));
+        c += vec3(0.0, 0.03, 0.06) * smoothstep(-0.25, 0.6, dir.y);     // light from above, scattered
+        // faint, slow drifts of light in the water, barely moving
+        vec2 q = vec2(dir.x/max(dir.z, 0.2)*2.5, dir.y*3.0);
+        float n = vnoise(q + vec2(uTime*0.03, -uTime*0.02)) + 0.5*vnoise(q*2.1 - vec2(uTime*0.02, 0.0));
+        return c + vec3(0.006, 0.012, 0.018) * (n - 0.75);
+      }
+      vec4 lookUp(vec2 s){
+        float u = 0.506 + s.x*0.2375;                      // horizontal position across the view, for the palette
+        vec3 d = viewRay(s);
+        if (d.y < 0.03) return vec4(underwater(d, u), 0.0); // looking sideways: just water
+        float dist = DEPTH / d.y;
+        vec2 xz = d.xz * dist;
+        vec3 sl = surfaceSlope(xz, dist);
+        vec3 N = normalize(vec3(-sl.x, 1.0, -sl.y));
+        vec3 r = refract(d, -N, 1.333);
+        vec3 deepR = underwater(reflect(d, -N), u);         // the surface's mirror of the water below
+        if (dot(r, r) < 1e-6) return vec4(deepR, 0.0);     // total internal reflection
+        float cosT = max(dot(r, N), 0.0);
+        float F = 0.0204 + 0.9796*pow(1.0 - cosT, 5.0);    // Fresnel (Schlick, from the air side)
+        float T = 1.0 - F;
+        // night sky through the surface: #122238 near the horizon to #295075 high up
+        float el = clamp(r.y, 0.0, 1.0);
+        vec3 sky = mix(vec3(0.07,0.13,0.22), vec3(0.13,0.25,0.40), smoothstep(0.05, 0.9, el));
+        float c = dot(r, SKY_MOON);
+        sky += vec3(0.16,0.28,0.38) * exp((c - 1.0)/0.03) + vec3(0.25,0.35,0.45) * exp((c - 1.0)/0.006);
+        float disc = smoothstep(MOON_COS - 0.0012, MOON_COS + 0.0012, c);
+        vec3 col = T*sky + F*deepR;
+        // crests and troughs of the broad waves focus and spread the light: long bands that move with them
+        col *= 1.0 - clamp(sl.z*0.9, -0.3, 0.4);
+        return vec4(col, T*disc);
+      }
+  `;
+
+  // background: the water, plus the big moon's halo
+  const bgScene = new THREE.Scene();
+  bgScene.add(quad(new THREE.ShaderMaterial({
+    uniforms, depthTest: false, depthWrite: false, vertexShader: flatVS,
+    fragmentShader: WATER + `
+      void main(){
+        vec2 s = screenPos();
+        vec3 col = lookUp(s).rgb;
+        // halo: sharp edge, then a short exponential fall-off (#37586c at 1.03R to background by ~1.45R)
+        col += vec3(0.118,0.239,0.282) * exp(-max(length(s) - 0.99, 0.0)/0.19);
+        gl_FragColor = vec4(col, 1.0);
+      }`
+  })));
+
+  // =====================================================================================
+  // 3. The moon: NASA LRO colour mosaic recoloured to the scene's palette,
+  // normals from LOLA altimetry, lit from the upper right, grab-and-spin with inertia.
+  // =====================================================================================
+  const MOON_R = 3.2;
+  const moonGroup = new THREE.Group();
+  moonGroup.position.set(0, -0.5, 0);
+  scene.add(moonGroup);
+  function solid(r, g, b) {
+    const t = new THREE.DataTexture(new Uint8Array([r, g, b, 255]), 1, 1, THREE.RGBAFormat);
+    t.needsUpdate = true; return t;
+  }
+  const moonUniforms = {
+    uMap: { value: solid(0x6f, 0x9b, 0x9a) },
+    uNormal: { value: solid(128, 128, 255) },
+    uLight: { value: new THREE.Vector3(0.455, 0.455, 0.766).normalize() },
+  };
+  const loader = new THREE.TextureLoader();
+  function loadInto(key, url) {
+    loader.load(url, tex => {
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      moonUniforms[key].value = tex;
+    });
+  }
+  loadInto('uMap', 'moon_albedo.jpg');
+  loadInto('uNormal', 'moon_normal.jpg');
+  const moon = new THREE.Mesh(
+    new THREE.SphereGeometry(MOON_R, 160, 120),
+    new THREE.ShaderMaterial({
+      uniforms: moonUniforms, transparent: true,
+      vertexShader: `
+        varying vec2 vUv; varying vec3 vN; varying vec3 vT;
+        void main(){
+          vUv = uv;
+          vN = normalize(normalMatrix * normal);
+          vec3 east = cross(vec3(0.0,1.0,0.0), normal);
+          if (dot(east,east) < 1e-6) east = vec3(1.0,0.0,0.0);
+          vT = normalize(normalMatrix * east);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
+        }`,
+      fragmentShader: `
+        uniform sampler2D uMap, uNormal; uniform vec3 uLight;
+        varying vec2 vUv; varying vec3 vN; varying vec3 vT;
+        void main(){
+          vec3 albedo = texture2D(uMap, vUv, 1.6).rgb;
+          vec3 N = normalize(vN);
+          vec3 T = normalize(vT - N*dot(vT,N));
+          vec3 B = cross(N, T);
+          vec3 nt = texture2D(uNormal, vUv, 3.0).xyz*2.0 - 1.0;
+          nt.xy *= 0.6;
+          vec3 n = normalize(T*nt.x + B*nt.y + N*nt.z);
+          float ng = dot(N, uLight), nm = dot(n, uLight);
+          float w = 1.0 - smoothstep(0.0, 0.3, abs(ng));
+          float lit = smoothstep(-0.01, 0.06, mix(ng, nm, w));
+          vec3 dark = albedo*0.45 + vec3(0.03,0.08,0.11);
+          vec3 day = albedo * mix(0.96, 1.05, smoothstep(0.2, 1.0, ng));
+          vec3 col = mix(dark, day, lit);
+          col *= mix(0.85, 1.0, smoothstep(0.0, 0.15, N.z));
+          col += vec3(0.03,0.035,0.05) * smoothstep(0.45, 0.95, N.y) * lit;
+          gl_FragColor = vec4(col, smoothstep(0.0, 0.16, N.z));
+        }`
+    })
+  );
+  moon.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -Math.PI / 2);
+  moonGroup.add(moon);
+
+  // =====================================================================================
+  // 4. The one cheat: the moon's image in the surface is drawn again on top of the big moon,
+  // so the reflection sits in front of it. Plus a bloom on that image (quarter size, 4 samples
+  // per pixel so thin glints count, blurred twice).
+  // =====================================================================================
+  const imageUniforms = scale => Object.assign({}, uniforms, { uScale: { value: scale } });
+  const glintScene = new THREE.Scene();
+  glintScene.add(quad(new THREE.ShaderMaterial({
+    uniforms: imageUniforms(1), transparent: true, depthTest: false, depthWrite: false, vertexShader: flatVS,
+    fragmentShader: WATER + `
+      void main(){
+        vec2 s = screenPos();
+        if (viewRay(s).y < 0.03) { gl_FragColor = vec4(0.0); return; }
+        float m = lookUp(s).w;
+        gl_FragColor = vec4(vec3(0.95, 0.97, 1.0), clamp(m*1.15, 0.0, 1.0));
+      }`
+  })));
+
+  const rtOpts = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false, type: THREE.HalfFloatType };
+  const rtA = new THREE.WebGLRenderTarget(2, 2, rtOpts), rtB = new THREE.WebGLRenderTarget(2, 2, rtOpts);
+  const glowU = { value: 0.6 };
+  const brightScene = new THREE.Scene();
+  brightScene.add(quad(new THREE.ShaderMaterial({
+    uniforms: Object.assign(imageUniforms(0.25), { uGlow: glowU }), depthTest: false, depthWrite: false, vertexShader: flatVS,
+    fragmentShader: WATER + `
+      uniform float uGlow;
+      void main(){
+        vec2 base = gl_FragCoord.xy/uScale;
+        float acc = 0.0;
+        for (int k = 0; k < 4; k++) {
+          vec2 o = k == 0 ? vec2(-0.75, -1.75) : k == 1 ? vec2(1.75, -0.75) : k == 2 ? vec2(0.75, 1.75) : vec2(-1.75, 0.75);
+          vec2 sp = (base + o - uMoon) / uMoonR; sp.y = -sp.y;
+          if (viewRay(sp).y >= 0.03) acc += lookUp(sp).w;
+        }
+        gl_FragColor = vec4(vec3(0.8,0.87,0.95) * acc * 0.25 * uGlow, 1.0);
+      }`
+  })));
+  const blurMat = new THREE.ShaderMaterial({
+    uniforms: { tSrc: { value: null }, uStep: { value: new THREE.Vector2() } },
+    depthTest: false, depthWrite: false, vertexShader: flatVS,
+    fragmentShader: `
+      uniform sampler2D tSrc; uniform vec2 uStep; varying vec2 vUv;
+      void main(){
+        vec3 c = texture2D(tSrc, vUv).rgb * 0.227027;
+        c += (texture2D(tSrc, vUv + uStep*1.0).rgb + texture2D(tSrc, vUv - uStep*1.0).rgb) * 0.1945946;
+        c += (texture2D(tSrc, vUv + uStep*2.0).rgb + texture2D(tSrc, vUv - uStep*2.0).rgb) * 0.1216216;
+        c += (texture2D(tSrc, vUv + uStep*3.0).rgb + texture2D(tSrc, vUv - uStep*3.0).rgb) * 0.054054;
+        c += (texture2D(tSrc, vUv + uStep*4.0).rgb + texture2D(tSrc, vUv - uStep*4.0).rgb) * 0.016216;
+        gl_FragColor = vec4(c, 1.0);
+      }`
+  });
+  const blurScene = new THREE.Scene(); blurScene.add(quad(blurMat));
+  const bloomScene = new THREE.Scene();
+  bloomScene.add(quad(new THREE.ShaderMaterial({
+    uniforms: { tBloom: { value: rtA.texture } },
+    transparent: true, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false, vertexShader: flatVS,
+    fragmentShader: `uniform sampler2D tBloom; varying vec2 vUv;
+      void main(){ gl_FragColor = vec4(texture2D(tBloom, vUv).rgb, 1.0); }`
+  })));
+  function renderBloom() {
+    renderer.setRenderTarget(rtA); renderer.render(brightScene, flatCam);
+    for (let i = 0; i < 2; i++) {
+      const spread = 1.0 + 0.75*i;
+      blurMat.uniforms.tSrc.value = rtA.texture; blurMat.uniforms.uStep.value.set(spread / rtA.width, 0);
+      renderer.setRenderTarget(rtB); renderer.render(blurScene, flatCam);
+      blurMat.uniforms.tSrc.value = rtB.texture; blurMat.uniforms.uStep.value.set(0, spread / rtA.height);
+      renderer.setRenderTarget(rtA); renderer.render(blurScene, flatCam);
+    }
+    renderer.setRenderTarget(null);
+  }
+
+  // film grain and a light vignette
+  const overlayScene = new THREE.Scene();
+  overlayScene.add(quad(new THREE.ShaderMaterial({
+    uniforms, transparent: true, depthTest: false, depthWrite: false, vertexShader: flatVS,
+    fragmentShader: `
+      uniform float uTime; uniform vec2 uRes; varying vec2 vUv;
+      float h(vec2 p){ return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); }
+      void main(){
+        vec2 c = vUv - 0.5; c.x *= uRes.x/uRes.y;
+        float vig = smoothstep(0.45, 1.1, length(c));
+        float grain = h(vUv*uRes + floor(uTime*24.0)) - 0.5;
+        gl_FragColor = vec4(vec3(0.0), clamp(vig*0.35 + max(-grain, 0.0)*0.06, 0.0, 1.0));
+      }`
+  })));
+
+  // =====================================================================================
+  // 5. Interaction: drag the moon to spin it (inertia; press to catch it), tap or drag on the water
+  // to drop ripples into the simulation.
+  // =====================================================================================
+  const omega = new THREE.Vector3(0, 0, 0);
+  const tmpQ = new THREE.Quaternion(), tmpV = new THREE.Vector3();
+  let touched = false, grabbing = false, stirring = false, last = null, lastMoveAt = 0;
+  const FRICTION = 0.45, MAX_SPIN = 14;
+  function rotateBy(axis, angle) { if (angle) { tmpQ.setFromAxisAngle(axis, angle); moon.quaternion.premultiply(tmpQ); } }
+  function screenAxis(dx, dy) { return tmpV.set(dy, dx, 0).normalize().applyQuaternion(camera.quaternion); }
+  // pointer -> moon-relative screen coords (moon radii, y down)
+  function toS(e) {
+    const pr = renderer.getPixelRatio();
+    const fx = e.clientX * pr, fy = (window.innerHeight - e.clientY) * pr;
+    return [(fx - uniforms.uMoon.value.x) / uniforms.uMoonR.value, -(fy - uniforms.uMoon.value.y) / uniforms.uMoonR.value];
+  }
+  // same ray as the shader: where on the surface (in simulation uv) does this pixel look?
+  function surfaceUV(sx, sy) {
+    let dx = sx*CAM.FS, dy = -sy*CAM.FS, dz = 1; const l = Math.hypot(dx, dy, dz); dx /= l; dy /= l; dz /= l;
+    const ca = Math.cos(CAM.ALPHA), sa = Math.sin(CAM.ALPHA);
+    const wx = dx, wy = dy*ca + dz*sa, wz = -dy*sa + dz*ca;
+    if (wy < 0.03) return null;
+    const t = CAM.DEPTH / wy;
+    // same bend and turn as warpXZ() in the shader, so a tap lands where it was made
+    let x = wx*t, z = wz*t;
+    const T = uniforms.uTime.value, W = uniforms.uWarp.value;
+    const dx2 = 0.35*Math.sin(x*0.61 + z*0.23 + T*0.11 + 1.3) + 0.18*Math.sin(-x*0.93 + z*1.21 - T*0.17 + 4.1) + 0.09*Math.cos(x*2.3 - z*1.7 + T*0.23);
+    const dz2 = 0.35*Math.cos(-x*0.19 + z*0.57 - T*0.09) + 0.18*Math.sin(x*1.37 + z*0.41 + T*0.13 + 2.2) + 0.09*Math.sin(x*1.1 + z*2.6 - T*0.21 + 0.7);
+    x += dx2*W; z += dz2*W;
+    return [(0.8916*x - 0.4529*z) / CAM.TILE, (0.4529*x + 0.8916*z) / CAM.TILE, t];
+  }
+  function dropAt(sx, sy, strength) {
+    const p = surfaceUV(sx, sy); if (!p) return;
+    const u = p[0] - Math.floor(p[0]), v = p[1] - Math.floor(p[1]);
+    // the same tap looks bigger close by and smaller far away
+    const radius = Math.max(0.016, Math.min(0.027, 0.068 / p[2]));
+    if (drops.length < 8) drops.push(new THREE.Vector4(u, v, strength, radius));
+  }
+  const onMoon = s => Math.hypot(s[0], s[1]) < 1.0;
+
+  canvas.addEventListener('pointerdown', e => {
+    const s = toS(e);
+    canvas.setPointerCapture(e.pointerId);
+    last = { x: e.clientX, y: e.clientY, t: performance.now() };
+    if (onMoon(s)) {
+      grabbing = true; touched = true; omega.set(0, 0, 0);   // caught
+      lastMoveAt = last.t; canvas.classList.add('grabbing');
+    } else {
+      stirring = true; dropAt(s[0], s[1], 0.02);
+    }
+  });
+  canvas.addEventListener('pointermove', e => {
+    const s = toS(e);
+    canvas.classList.toggle('over-moon', onMoon(s));
+    if (stirring) {
+      if (Math.hypot(e.clientX - last.x, e.clientY - last.y) > 10) { dropAt(s[0], s[1], 0.01); last = { x: e.clientX, y: e.clientY, t: performance.now() }; }
+      return;
+    }
+    if (!grabbing) return;
+    const now = performance.now();
+    const dx = e.clientX - last.x, dy = e.clientY - last.y;
+    const dt = Math.max((now - last.t) / 1000, 1 / 240);
+    const dist = Math.hypot(dx, dy);
+    if (dist > 0) {
+      const rCss = uniforms.uMoonR.value / renderer.getPixelRatio();
+      const angle = dist / rCss;
+      const axis = screenAxis(dx, dy).clone();
+      rotateBy(axis, angle);
+      omega.lerp(axis.multiplyScalar(angle / dt), 0.5);
+      lastMoveAt = now;
+    }
+    last = { x: e.clientX, y: e.clientY, t: now };
+  });
+  function release() {
+    stirring = false;
+    if (!grabbing) return;
+    grabbing = false; canvas.classList.remove('grabbing');
+    if (performance.now() - lastMoveAt > 90) omega.set(0, 0, 0);
+    if (omega.length() > MAX_SPIN) omega.setLength(MAX_SPIN);
+  }
+  canvas.addEventListener('pointerup', release);
+  canvas.addEventListener('pointercancel', release);
+  canvas.addEventListener('keydown', e => {
+    const k = { ArrowLeft: [0, -1], ArrowRight: [0, 1], ArrowUp: [-1, 0], ArrowDown: [1, 0] }[e.key];
+    if (k) { e.preventDefault(); touched = true; omega.add(screenAxis(k[1], k[0]).clone().multiplyScalar(0.8)); }
+    else if (e.key === ' ') { e.preventDefault(); omega.set(0, 0, 0); }
+  });
+
+  document.getElementById('wind').addEventListener('input', e => simMat.uniforms.uWind.value = parseFloat(e.target.value));
+  document.getElementById('warp').addEventListener('input', e => uniforms.uWarp.value = parseFloat(e.target.value));
+  document.getElementById('chop').addEventListener('input', e => uniforms.uChop.value = parseFloat(e.target.value));
+  document.getElementById('swell').addEventListener('input', e => uniforms.uSwell.value = parseFloat(e.target.value));
+  document.getElementById('speed').addEventListener('input', e => waveSpeed = parseFloat(e.target.value));
+  document.getElementById('glow').addEventListener('input', e => glowU.value = parseFloat(e.target.value));
+  let bloomOn = true;
+  const bloomBtn = document.getElementById('bloom');
+  bloomBtn.addEventListener('click', () => {
+    bloomOn = !bloomOn;
+    bloomBtn.firstElementChild.textContent = bloomOn ? 'Bloom on' : 'Bloom off';
+    bloomBtn.setAttribute('aria-pressed', String(bloomOn));
+  });
+  let paused = false;
+  const pauseBtn = document.getElementById('pause');
+  pauseBtn.addEventListener('click', () => { paused = !paused; pauseBtn.firstElementChild.textContent = paused ? 'Play' : 'Pause'; });
+
+  function resize() {
+    const w = window.innerWidth, h = window.innerHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.position.z = w / h < 1 ? 14 / Math.max(w / h, 0.5) * 0.85 : 14;
+    camera.updateProjectionMatrix();
+    const pr = renderer.getPixelRatio();
+    uniforms.uRes.value.set(w * pr, h * pr);
+    rtA.setSize(Math.max(1, Math.round(w * pr / 4)), Math.max(1, Math.round(h * pr / 4)));
+    rtB.setSize(rtA.width, rtA.height);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  const centre = new THREE.Vector3();
+  function updateMoonScreen() {
+    moonGroup.getWorldPosition(centre);
+    const dist = centre.distanceTo(camera.position);
+    centre.project(camera);
+    const res = uniforms.uRes.value;
+    uniforms.uMoon.value.set((centre.x * 0.5 + 0.5) * res.x, (centre.y * 0.5 + 0.5) * res.y);
+    const focal = (res.y / 2) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+    uniforms.uMoonR.value = focal * MOON_R / Math.sqrt(Math.max(dist * dist - MOON_R * MOON_R, 1e-3));
+  }
+
+  const clock = new THREE.Clock();
+  let t = 0, wt = 0, simBudget = 0;
+  let waveSpeed = 0.6;
+  function frame() {
+    const dt = Math.min(clock.getDelta(), 0.05);
+    if (!paused) {
+      t += dt * speed;
+      // the water runs on its own clock, scaled by the Speed control: swells, waves, warp drift and
+      // the simulation all slow together (fewer simulation steps per second, so ripples travel slower)
+      const ws = speed * waveSpeed;
+      wt += dt * ws;
+      simMat.uniforms.uTime.value = wt;
+      simBudget = Math.min(simBudget + dt * 120 * ws, 4);
+      while (simBudget >= 1) { simStep(); simBudget -= 1; }
+    }
+    uniforms.uTime.value = wt;
+    uniforms.uSim.value = simRT[simCur].texture;
+
+    if (!grabbing && !paused) {
+      const w = omega.length();
+      if (w > 1e-5) rotateBy(tmpV.copy(omega).divideScalar(w), w * dt);
+      if (touched) omega.multiplyScalar(Math.exp(-FRICTION * dt));
+    }
+    const drift = reduceMotion ? 0 : 1;
+    camera.position.x = Math.sin(t * 0.2) * 0.25 * drift;
+    camera.position.y = Math.sin(t * 0.15) * 0.15 * drift;
+    camera.lookAt(0, 0.2, 0);
+    moonGroup.position.y = -0.5 + Math.sin(t * 0.3) * 0.05;
+    updateMoonScreen();
+
+    if (bloomOn) renderBloom();
+    renderer.setRenderTarget(null);
+    renderer.clear();
+    renderer.render(bgScene, flatCam);
+    renderer.render(scene, camera);
+    renderer.render(glintScene, flatCam);       // the moon's image, in front of the big moon
+    if (bloomOn) renderer.render(bloomScene, flatCam);
+    renderer.render(overlayScene, flatCam);
+    drawSliders(reduceMotion ? 0 : performance.now()/1000);
+    requestAnimationFrame(frame);
+  }
+  // ---------------------------------------------------------------------------------------
+  // Line controls: a solid white line up to the value; past it the line is faint and jiggles.
+  // The real range inputs sit invisibly on top, so dragging, keyboard and screen readers all work.
+  // ---------------------------------------------------------------------------------------
+  const lineSliders = [...document.querySelectorAll('.line')].map((el, i) => ({
+    input: el.querySelector('input'), canvas: el.querySelector('canvas'), seed: i*7.31 }));
+  function drawSliders(time) {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    for (const sl of lineSliders) {
+      const c = sl.canvas, w = c.clientWidth, h = c.clientHeight;
+      if (!w) continue;
+      if (c.width !== Math.round(w*dpr) || c.height !== Math.round(h*dpr)) { c.width = Math.round(w*dpr); c.height = Math.round(h*dpr); }
+      const g = c.getContext('2d');
+      g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+      const inp = sl.input, min = +inp.min, max = +inp.max;
+      const x = (inp.value - min) / (max - min) * w, y = Math.round(h/2) + 0.5;
+      g.lineCap = 'round';
+      g.strokeStyle = 'rgba(255,255,255,0.35)'; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(x, y);
+      for (let px = x + 2; px <= w; px += 2) {
+        const ease = Math.min(1, (px - x)/14);
+        const j = Math.sin(px*0.35 + time*7 + sl.seed)*0.9 + Math.sin(px*0.13 - time*4.3 + sl.seed*2.0)*0.7;
+        g.lineTo(px, y + j*ease);
+      }
+      g.stroke();
+      g.strokeStyle = '#ffffff'; g.lineWidth = 1.5;
+      g.beginPath(); g.moveTo(0.75, y); g.lineTo(Math.max(x, 0.75), y); g.stroke();
+    }
+  }
+
+  // Settings from the address, e.g. ?waves=1.2&swell=1.2&speed=0.3&bloom=0&turn=90&ui=0
+  const q = new URLSearchParams(location.search);
+  for (const [key, id] of [['wind','wind'], ['warp','warp'], ['waves','chop'], ['swell','swell'], ['speed','speed'], ['glow','glow']]) {
+    if (q.has(key)) { const el = document.getElementById(id); el.value = q.get(key); el.dispatchEvent(new Event('input')); }
+  }
+  if (q.get('bloom') === '0') bloomBtn.click();
+  if (q.has('turn')) rotateBy(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(parseFloat(q.get('turn')) || 0));
+  if (q.get('ui') === '0') document.getElementById('controls').classList.add('hidden-ui');
+
+  frame();
+})();
+</script>
+</body>
+</html>
