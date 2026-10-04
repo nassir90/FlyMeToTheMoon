@@ -56,9 +56,9 @@ Drag the moon to spin it. Let go mid-drag to throw it; press on it while it's tu
 
 ### The sky
 
-The Sky control slides through five times of day. Every colour in the scene comes from one palette: the water on both sides, the light falling from above, the sky seen through the surface and the glow around the moon in it, the reflection and its bloom, the halo, and the moon's own tint, shadow, see-through and crater relief. Between two looks, every colour is blended, so the control shifts smoothly from one to the next.
+Five sky presets, at the top of the controls, set the time of day. Every colour in the scene comes from one palette: the water on both sides, the light falling from above, the sky seen through the surface and the glow around the moon in it, the reflection and its bloom, the halo, and the moon's own tint, shadow, see-through and crater relief. Pressing a preset fades every colour across to the new look over about a second.
 
-**Day:** a bright blue sky through the surface and teal water. The moon looks the way it does in daylight: its dark seas turn see-through so the water and sky show through them, the bright highlands stay solid, the craters show crisply across the whole face, and the glow around it all but disappears.
+**Day:** a bright blue sky through the surface and teal water. The moon looks the way it does in daylight: it's washed almost white, its darkness maps straight to transparency (the dark seas vanish into the water and sky behind, the bright highlands stay solid), the craters show crisply across the whole face, and the glow around it all but disappears.
 
 ![Day](docs/screenshots/12-sky-day.jpg)
 
@@ -78,7 +78,7 @@ The Sky control slides through five times of day. Every colour in the scene come
 
 ![Eclipse](docs/screenshots/16-sky-eclipse.jpg)
 
-Halfway between Day and Sunset:
+Halfway through the fade from Day to Sunset:
 
 ![Between day and sunset](docs/screenshots/17-sky-between.jpg)
 
@@ -90,7 +90,7 @@ The controls sit in the lower right as plain white lines: solid up to the curren
 
 | Control | What it does | Range | Default |
 |---|---|---|---|
-| Sky | Time of day: Day, Sunset, Night, Midnight, Eclipse, blended in between | 0 – 4 | 2 (Night) |
+| Day · Sunset · Night · Midnight · Eclipse | Sky presets; pressing one fades the scene to it | | Night |
 | Wind | Strength of the simulated wind ripples | 0 – 1.2 | 0.45 |
 | Warp | How much the height grid is bent | 0 – 2 | 1 |
 | Waves | Strength of the broad wind sea | 0 – 1.2 | 0.9 |
@@ -109,7 +109,7 @@ Every control can be set from the address, which is how the screenshots here wer
 
 ```
 ?sky=sunset                       a look by name (day, sunset, night, midnight, eclipse)
-?sky=0.5                          or any point between them (0 = day ... 4 = eclipse)
+?sky=0.5                          or any point between them (0 = day ... 4 = eclipse), no fade
 ?wind=0.1&waves=0.3&swell=0.3     calm water
 ?wind=1.2&waves=1.2&swell=1.2     rough water
 ?speed=0.3                        slow motion
