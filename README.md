@@ -56,9 +56,9 @@ Drag the moon to spin it. Let go mid-drag to throw it; press on it while it's tu
 
 ### The sky
 
-Five sky presets, at the top of the controls, set the time of day. Every colour in the scene comes from one palette: the water on both sides, the light falling from above, the sky seen through the surface and the glow around the moon in it, the reflection and its bloom, the halo, and the moon's own tint, shadow, see-through and crater relief. Pressing a preset fades every colour across to the new look over about a second.
+Five sky presets, at the top of the controls, set the time of day. Every colour in the scene comes from one palette: the water on both sides, the light falling from above, the sky seen through the surface and the glow around the moon in it, the reflection and its bloom, the halo, and the moon's own tint, shadow and crater relief. Pressing a preset fades every colour across to the new look over about a second.
 
-**Day:** a bright blue sky through the surface and teal water. The moon looks the way it does in daylight: it's washed almost white, its darkness maps straight to transparency (the dark seas vanish into the water and sky behind, the bright highlands stay solid), and the glow around it all but disappears.
+**Day:** a bright blue sky through the surface and teal water. The moon is washed almost white, and the glow around it all but disappears.
 
 ![Day](docs/screenshots/12-sky-day.jpg)
 
