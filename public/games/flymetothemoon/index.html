@@ -54,6 +54,7 @@
   <label for="chop"><span class="squeeze">Waves</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="chop" type="range" min="0" max="1.2" step="0.01" value="0.9"></div>
   <label for="swell"><span class="squeeze">Swell</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="swell" type="range" min="0" max="1.2" step="0.01" value="0.8"></div>
   <label for="speed"><span class="squeeze">Speed</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="speed" type="range" min="0.1" max="1.5" step="0.01" value="0.6"></div>
+  <label for="halo"><span class="squeeze">Halo</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="halo" type="range" min="0" max="2" step="0.01" value="1"></div>
   <label for="glow"><span class="squeeze">Glow</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="glow" type="range" min="0" max="2" step="0.01" value="0.6"></div>
   <div class="buttons">
     <button id="bloom" type="button" aria-pressed="true"><span class="squeeze">Bloom on</span></button>
@@ -106,7 +107,7 @@
     uDeepL: { value: new THREE.Vector3() }, uDeepR: { value: new THREE.Vector3() }, uUpLight: { value: new THREE.Vector3() },
     uSkyLow: { value: new THREE.Vector3() }, uSkyHigh: { value: new THREE.Vector3() },
     uGlowA: { value: new THREE.Vector3() }, uGlowB: { value: new THREE.Vector3() },
-    uHalo: { value: new THREE.Vector3() }, uImage: { value: new THREE.Vector3() }, uBloomTint: { value: new THREE.Vector3() },
+    uHalo: { value: new THREE.Vector3() }, uHaloGain: { value: 1 }, uImage: { value: new THREE.Vector3() }, uBloomTint: { value: new THREE.Vector3() },
   };
 
   // =====================================================================================
@@ -206,6 +207,7 @@
   // =====================================================================================
   const CAM = { FS: 0.25, ALPHA: 0.648, DEPTH: 3.0, TILE: 20.0 };
   const WATER = `
+      uniform float uHaloGain;
       uniform vec3 uDeepL, uDeepR, uUpLight, uSkyLow, uSkyHigh, uGlowA, uGlowB, uHalo, uImage, uBloomTint;
       uniform sampler2D uSim; uniform float uTime, uSwell, uChop, uWarp, uChopMode, uLimit, uScale; uniform vec2 uMoon; uniform float uMoonR;
       const float FS = ${CAM.FS}, ALPHA = ${CAM.ALPHA}, DEPTH = ${CAM.DEPTH.toFixed(1)}, TILE = ${CAM.TILE.toFixed(1)};
@@ -376,7 +378,7 @@
         vec2 s = screenPos();
         vec3 col = lookUp(s).rgb;
         // halo: sharp edge, then a short exponential fall-off (#37586c at 1.03R to background by ~1.45R)
-        col += uHalo * exp(-max(length(s) - 0.99, 0.0)/0.19);
+        col += uHalo * uHaloGain * exp(-max(length(s) - 0.99, 0.0)/0.19);
         gl_FragColor = vec4(col, 1.0);
       }`
   })));
@@ -400,6 +402,8 @@
     uMoonMul: { value: new THREE.Vector3(1, 1, 1) },      // tint
     uMoonMix: { value: new THREE.Vector4(1, 1, 1, 0) },   // colour to wash toward, and how far
     uMoonDark: { value: new THREE.Vector3() },            // colour of the shadowed crescent
+    uMoonSee: { value: 0 },                               // daytime see-through: dark seas let the sky show
+    uRelief: { value: 0 },                                // crater relief across the whole face (0 = only at the shadow edge)
   };
   const loader = new THREE.TextureLoader();
   function loadInto(key, url) {
@@ -426,15 +430,15 @@
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
         }`,
       fragmentShader: `
-        uniform sampler2D uMap, uNormal; uniform vec3 uLight, uMoonMul, uMoonDark; uniform vec4 uMoonMix;
+        uniform sampler2D uMap, uNormal; uniform vec3 uLight, uMoonMul, uMoonDark; uniform vec4 uMoonMix; uniform float uMoonSee, uRelief;
         varying vec2 vUv; varying vec3 vN; varying vec3 vT;
         void main(){
           vec3 albedo = texture2D(uMap, vUv, 1.6).rgb;
           vec3 N = normalize(vN);
           vec3 T = normalize(vT - N*dot(vT,N));
           vec3 B = cross(N, T);
-          vec3 nt = texture2D(uNormal, vUv, 3.0).xyz*2.0 - 1.0;
-          nt.xy *= 0.6;
+          vec3 nt = texture2D(uNormal, vUv, mix(3.0, 1.2, uRelief)).xyz*2.0 - 1.0;   // crisper with more relief
+          nt.xy *= mix(0.6, 1.0, uRelief);
           vec3 n = normalize(T*nt.x + B*nt.y + N*nt.z);
           float ng = dot(N, uLight), nm = dot(n, uLight);
           float w = 1.0 - smoothstep(0.0, 0.3, abs(ng));
@@ -444,8 +448,13 @@
           vec3 col = mix(dark, day, lit);
           col *= mix(0.85, 1.0, smoothstep(0.0, 0.15, N.z));
           col += vec3(0.03,0.035,0.05) * smoothstep(0.45, 0.95, N.y) * lit;
+          // crater relief over the whole face, not just along the shadow edge
+          col *= 1.0 + clamp((nm - ng)*2.6, -0.45, 0.45) * uRelief;
           col = mix(col*uMoonMul, uMoonMix.rgb, uMoonMix.a);
-          gl_FragColor = vec4(col, smoothstep(0.0, 0.16, N.z));
+          // by day the dark seas turn see-through and the bright highlands stay solid
+          float bright = smoothstep(0.45, 0.64, dot(albedo, vec3(0.2126, 0.7152, 0.0722)));
+          float see = mix(1.0, mix(0.22, 1.0, bright), uMoonSee);
+          gl_FragColor = vec4(col, smoothstep(0.0, 0.16, N.z) * see);
         }`
     })
   );
@@ -631,6 +640,7 @@
   document.getElementById('chop').addEventListener('input', e => uniforms.uChop.value = parseFloat(e.target.value));
   document.getElementById('swell').addEventListener('input', e => uniforms.uSwell.value = parseFloat(e.target.value));
   document.getElementById('speed').addEventListener('input', e => waveSpeed = parseFloat(e.target.value));
+  document.getElementById('halo').addEventListener('input', e => uniforms.uHaloGain.value = parseFloat(e.target.value));
   document.getElementById('glow').addEventListener('input', e => glowU.value = parseFloat(e.target.value));
   let bloomOn = true;
   const bloomBtn = document.getElementById('bloom');
@@ -757,40 +767,42 @@
     { name: 'Day',
       deepL: [0.09,0.19,0.25], deepR: [0.10,0.21,0.29], upLight: [0.05,0.13,0.16],
       skyLow: [0.50,0.70,0.88], skyHigh: [0.28,0.52,0.85], glowA: [0.10,0.10,0.08], glowB: [0.18,0.18,0.15],
-      halo: [0.16,0.30,0.34], image: [1.0,1.0,1.0], bloom: [0.85,0.92,1.0],
-      moonMul: [1,1,1], moonMix: [0.93,0.95,0.96,0.62], moonDark: [0.20,0.30,0.36] },
+      halo: [0.04,0.075,0.085], image: [1.0,1.0,1.0], bloom: [0.85,0.92,1.0],
+      moonMul: [1,1,1], moonMix: [0.94,0.96,0.98,0.4], moonDark: [0.20,0.30,0.36], moonSee: 0.8, relief: 1.0 },
     { name: 'Sunset',
       deepL: [0.14,0.07,0.05], deepR: [0.10,0.06,0.08], upLight: [0.10,0.05,0.02],
       skyLow: [0.92,0.45,0.18], skyHigh: [0.40,0.24,0.36], glowA: [0.30,0.16,0.06], glowB: [0.40,0.28,0.14],
       halo: [0.30,0.16,0.10], image: [1.0,0.86,0.62], bloom: [1.0,0.72,0.45],
-      moonMul: [1.2,0.9,0.72], moonMix: [0.98,0.78,0.58,0.45], moonDark: [0.14,0.06,0.05] },
+      moonMul: [1.2,0.9,0.72], moonMix: [0.98,0.78,0.58,0.45], moonDark: [0.14,0.06,0.05], moonSee: 0.1, relief: 0.25 },
     { name: 'Night',
       deepL: [0.098,0.075,0.075], deepR: [0.102,0.098,0.133], upLight: [0.0,0.03,0.06],
       skyLow: [0.07,0.13,0.22], skyHigh: [0.13,0.25,0.40], glowA: [0.16,0.28,0.38], glowB: [0.25,0.35,0.45],
       halo: [0.118,0.239,0.282], image: [0.95,0.97,1.0], bloom: [0.8,0.87,0.95],
-      moonMul: [1,1,1], moonMix: [1,1,1,0], moonDark: [0.03,0.08,0.11] },
+      moonMul: [1,1,1], moonMix: [1,1,1,0], moonDark: [0.03,0.08,0.11], moonSee: 0, relief: 0 },
     { name: 'Midnight',
       deepL: [0.025,0.02,0.025], deepR: [0.025,0.028,0.04], upLight: [0.0,0.012,0.025],
       skyLow: [0.02,0.035,0.06], skyHigh: [0.035,0.07,0.13], glowA: [0.08,0.13,0.19], glowB: [0.15,0.2,0.27],
       halo: [0.05,0.10,0.12], image: [0.9,0.94,1.0], bloom: [0.55,0.65,0.8],
-      moonMul: [0.78,0.82,0.88], moonMix: [0,0,0,0], moonDark: [0.01,0.03,0.045] },
+      moonMul: [0.78,0.82,0.88], moonMix: [0,0,0,0], moonDark: [0.01,0.03,0.045], moonSee: 0, relief: 0 },
     { name: 'Eclipse',
       deepL: [0.045,0.018,0.018], deepR: [0.04,0.02,0.026], upLight: [0.03,0.004,0.0],
       skyLow: [0.04,0.025,0.03], skyHigh: [0.05,0.03,0.05], glowA: [0.22,0.06,0.03], glowB: [0.32,0.10,0.05],
       halo: [0.26,0.06,0.03], image: [0.98,0.50,0.28], bloom: [0.85,0.32,0.14],
-      moonMul: [1.30,0.48,0.32], moonMix: [0,0,0,0], moonDark: [0.05,0.01,0.01] },
+      moonMul: [1.30,0.48,0.32], moonMix: [0,0,0,0], moonDark: [0.05,0.01,0.01], moonSee: 0, relief: 0.35 },
   ];
   const skyInput = document.getElementById('sky');
   function applySky(v) {
     v = Math.min(SKIES.length - 1, Math.max(0, v));
     const i = Math.min(SKIES.length - 2, Math.floor(v)), f = v - i, A = SKIES[i], B = SKIES[i + 1];
     const mixv = k => A[k].map((a, n) => a + (B[k][n] - a)*f);
+    const mixs = k => A[k] + (B[k] - A[k])*f;
     const set = (u, k) => u.value.fromArray(mixv(k));
     set(uniforms.uDeepL, 'deepL'); set(uniforms.uDeepR, 'deepR'); set(uniforms.uUpLight, 'upLight');
     set(uniforms.uSkyLow, 'skyLow'); set(uniforms.uSkyHigh, 'skyHigh');
     set(uniforms.uGlowA, 'glowA'); set(uniforms.uGlowB, 'glowB');
     set(uniforms.uHalo, 'halo'); set(uniforms.uImage, 'image'); set(uniforms.uBloomTint, 'bloom');
     set(moonUniforms.uMoonMul, 'moonMul'); set(moonUniforms.uMoonMix, 'moonMix'); set(moonUniforms.uMoonDark, 'moonDark');
+    moonUniforms.uMoonSee.value = mixs('moonSee'); moonUniforms.uRelief.value = mixs('relief');
     const d = mixv('deepL');
     CLEAR.setRGB(d[0], d[1], d[2]); renderer.setClearColor(CLEAR, 1);
     document.body.style.background = '#' + CLEAR.getHexString();
@@ -801,7 +813,7 @@
 
   // Settings from the address, e.g. ?sky=sunset&waves=1.2&swell=1.2&speed=0.3&bloom=0&turn=90&ui=0
   const q = new URLSearchParams(location.search);
-  for (const [key, id] of [['wind','wind'], ['warp','warp'], ['waves','chop'], ['swell','swell'], ['speed','speed'], ['glow','glow']]) {
+  for (const [key, id] of [['wind','wind'], ['warp','warp'], ['waves','chop'], ['swell','swell'], ['speed','speed'], ['halo','halo'], ['glow','glow']]) {
     if (q.has(key)) { const el = document.getElementById(id); el.value = q.get(key); el.dispatchEvent(new Event('input')); }
   }
   if (q.has('sky')) {
