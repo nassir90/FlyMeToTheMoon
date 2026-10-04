@@ -56,7 +56,7 @@ Drag the moon to spin it. Let go mid-drag to throw it; press on it while it's tu
 
 ## Controls
 
-The controls sit in the lower right as plain white lines: solid up to the current value, faint and jiggling past it. Drag along a line, or focus it and use the arrow keys.
+The controls sit in the lower right as plain white lines: solid up to the current value, swelling slightly there and blending into a faint line that barely wobbles. Drag along a line, or focus it and use the arrow keys.
 
 ![The line controls](docs/screenshots/11-controls.jpg)
 

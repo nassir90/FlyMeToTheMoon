@@ -699,7 +699,8 @@
     requestAnimationFrame(frame);
   }
   // ---------------------------------------------------------------------------------------
-  // Line controls: a solid white line up to the value; past it the line is faint and jiggles.
+  // Line controls: a solid white line up to the value, swelling slightly there and blending
+  // into a faint line that barely wobbles.
   // The real range inputs sit invisibly on top, so dragging, keyboard and screen readers all work.
   // ---------------------------------------------------------------------------------------
   const lineSliders = [...document.querySelectorAll('.line')].map((el, i) => ({
@@ -714,17 +715,27 @@
       g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
       const inp = sl.input, min = +inp.min, max = +inp.max;
       const x = (inp.value - min) / (max - min) * w, y = Math.round(h/2) + 0.5;
-      g.lineCap = 'round';
-      g.strokeStyle = 'rgba(255,255,255,0.35)'; g.lineWidth = 1;
-      g.beginPath(); g.moveTo(x, y);
-      for (let px = x + 2; px <= w; px += 2) {
-        const ease = Math.min(1, (px - x)/14);
-        const j = Math.sin(px*0.35 + time*7 + sl.seed)*0.9 + Math.sin(px*0.13 - time*4.3 + sl.seed*2.0)*0.7;
-        g.lineTo(px, y + j*ease);
+      // One filled ribbon per line, so nothing overlaps: its width swells slightly at the value,
+      // its centre wobbles very gently past it, and a single gradient takes it from solid white
+      // into faint grey over a short stretch around the value.
+      const top = [], bot = [];
+      for (let px = 0; px <= w + 0.01; px += 1) {
+        const d = px - x;
+        const t = Math.min(1, Math.max(0, (d + 12) / 24)), s = t*t*(3 - 2*t);
+        const half = (1.5 - 0.5*s + 1.6*Math.exp(-(d*d)/30)) / 2;      // swelling at the value
+        const ease = Math.min(1, Math.max(0, d)/16);
+        const cy = y + (Math.sin(px*0.35 + time*7 + sl.seed)*0.35 + Math.sin(px*0.13 - time*4.3 + sl.seed*2.0)*0.25) * ease;
+        top.push(px, cy - half); bot.push(px, cy + half);
       }
-      g.stroke();
-      g.strokeStyle = '#ffffff'; g.lineWidth = 1.5;
-      g.beginPath(); g.moveTo(0.75, y); g.lineTo(Math.max(x, 0.75), y); g.stroke();
+      const gr = g.createLinearGradient(0, 0, w, 0);
+      const a = Math.min(1, Math.max(0, (x - 12)/w)), b = Math.min(1, Math.max(a, (x + 12)/w));
+      gr.addColorStop(0, '#ffffff'); gr.addColorStop(a, '#ffffff');
+      gr.addColorStop(b, 'rgba(255,255,255,0.35)'); gr.addColorStop(1, 'rgba(255,255,255,0.35)');
+      g.fillStyle = gr;
+      g.beginPath(); g.moveTo(top[0], top[1]);
+      for (let i = 2; i < top.length; i += 2) g.lineTo(top[i], top[i+1]);
+      for (let i = bot.length - 2; i >= 0; i -= 2) g.lineTo(bot[i], bot[i+1]);
+      g.closePath(); g.fill();
     }
   }
 
