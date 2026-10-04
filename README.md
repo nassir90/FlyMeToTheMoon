@@ -92,7 +92,7 @@ Halfway through the fade from Day to Sunset:
 
 ## Controls
 
-The controls sit in the lower right: the sky presets along the top, then plain white lines that reach left to line up under the first preset, solid up to the current value and blending quickly into a faint line that barely wobbles, then a row of buttons. Drag along a line, or focus it and use the arrow keys.
+The controls sit in the lower right: the sky presets along the top, then plain white lines that reach left to line up under the first preset, solid up to the current value and blending quickly into a faint line that barely wobbles, then a row of buttons. Drag along a line, or focus it and use the arrow keys. Press **H** to hide or show the controls.
 
 ![The line controls](docs/screenshots/11-controls.jpg)
 

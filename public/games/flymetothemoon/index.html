@@ -49,7 +49,7 @@
 </style>
 </head>
 <body>
-<canvas id="scene" tabindex="0" aria-label="Animated 3D scene: a full moon seen from under a simulated water surface. Drag the moon to spin it; tap the water to drop a ripple."></canvas>
+<canvas id="scene" tabindex="0" aria-label="Animated 3D scene: a full moon seen from under a simulated water surface. Drag the moon to spin it; tap the water to drop a ripple; press H to hide or show the controls."></canvas>
 
 <div class="controls" id="controls">
   <div class="presets" role="group" aria-label="Sky">
@@ -926,6 +926,16 @@
   if (/^(behind|above|sky)$/.test(q.get('moon') || '')) { moonBtn.click(); aboveT = 1; }
   if (q.has('turn')) rotateBy(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(parseFloat(q.get('turn')) || 0));
   if (q.get('ui') === '0') document.getElementById('controls').classList.add('hidden-ui');
+
+  // H hides and shows the controls
+  window.addEventListener('keydown', e => {
+    if (e.key !== 'h' && e.key !== 'H') return;
+    if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+    const controls = document.getElementById('controls');
+    const hiding = !controls.classList.contains('hidden-ui');
+    if (hiding && controls.contains(document.activeElement)) canvas.focus();
+    controls.classList.toggle('hidden-ui', hiding);
+  });
 
   frame();
 })();
