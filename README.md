@@ -40,7 +40,7 @@ The dark water below and the surface's mirror of it share one colour field, warm
 
 ![Broad waves alone, rolling across the surface](docs/screenshots/04-broad-waves.jpg)
 
-Some light also leaks into the dark water, badly scrambled. There, each ray is bent again through an exaggerated version of the surface (its real slopes amplified about six times, plus a fast jitter), so the few rays that still get out pick up warped fragments of sky, moon glow and moon. They drift through the dark water below the window's edge and fade out with depth. With the moon **Behind** the surface, the same happens to the moon itself: whatever part of it sinks below the waterline still comes through as a faint, shattered ghost, looked up at a badly scrambled position, instead of vanishing. Lower it with **Height** to see more of it. The **Leak** control sets how much gets through.
+Some light also leaks into the dark water, badly scrambled. There, each ray is bent again through an exaggerated version of the surface (its real slopes amplified about six times, plus a fast jitter), so the few rays that still get out pick up warped fragments of sky, moon glow and moon. They drift through the dark water below the window's edge and fade out with depth. In the **Below** view, with the moon behind the surface, the same happens to the moon itself: whatever part of it sinks below the waterline still comes through as a faint, shattered ghost, looked up at a badly scrambled position, instead of vanishing. Lower it with **Height** to see more of it. The **Leak** control sets how much gets through.
 
 ![The moon behind the water, lowered, leaking through the dark water as a shattered ghost](docs/screenshots/21-leak.jpg)
 
@@ -68,9 +68,9 @@ Drag the moon to spin it. Let go mid-drag to throw it; press on it while it's tu
 
 ![A clean frame](docs/screenshots/09-clean.jpg)
 
-### In front of or behind the water
+### Frank and Below: the moon in front of or behind the water
 
-The **In front** button sends the moon up behind the surface (it then reads **Behind**). It glides up into the bright window and shrinks, as if far above, and from then on you see it through the water: it's rendered off-screen each frame and looked up at a position bent by the surface's slope, so the waves wobble it, it dims toward the window's edge where less light gets through, and it disappears past the critical angle, where its lower edge dips into the dark water. The bright reflection fades to a faint shimmer so there aren't two moons, and the halo follows it up. You can still spin it.
+From under the water there are two views. **Frank** keeps the moon in the water, in front of everything, as above. **Below** sends it up behind the surface. It glides up into the bright window and shrinks, as if far above, and from then on you see it through the water: it's rendered off-screen each frame and looked up at a position bent by the surface's slope, so the waves wobble it, it dims toward the window's edge where less light gets through, and it disappears past the critical angle, where its lower edge dips into the dark water. The bright reflection fades to a faint shimmer so there aren't two moons, and the halo follows it up. You can still spin it.
 
 ![The moon behind the water at night](docs/screenshots/18-moon-behind.jpg)
 
@@ -137,14 +137,14 @@ In all of them, the moon in the sky is the real one, the same 3D moon as in Belo
 
 ## Controls
 
-The controls sit in the lower right: the sky presets and the four views along the top, then plain white lines that reach left to line up under the first preset, solid up to the current value and blending quickly into a faint line that barely wobbles, then a row of buttons. The lines are hidden to begin with: press **P** to show or hide them. Drag along a line, or focus it and use the arrow keys. Press **H** to hide or show all the controls. Only the controls that do something in the current view are shown: Height, Drift, In front / Behind and Bloom are Below's, Glow shows only with the bloom on, Leak only where the camera under the water is looking (Below, and Cut with the eye's light), and the light button only in Cut.
+The controls sit in the lower right: the sky presets and the five views along the top, then plain white lines that reach left to line up under the first preset, solid up to the current value and blending quickly into a faint line that barely wobbles, then a row of buttons. The lines are hidden to begin with: press **P** to show or hide them. Drag along a line, or focus it and use the arrow keys. Press **H** to hide or show all the controls. Only the controls that do something in the current view are shown: Height, Drift and Bloom are Frank's and Below's, Glow shows only with the bloom on, Leak only where the camera under the water is looking (Frank, Below, and Cut with the eye's light), and the light button only in Cut.
 
 ![The line controls](docs/screenshots/11-controls.jpg)
 
 | Control | What it does | Range | Default |
 |---|---|---|---|
 | Day · Sunset · Night · Midnight · Eclipse | Sky presets; pressing one fades the scene to it | | Night |
-| Below · Cut · Above · Wide | The view: from under the water, the water cut open from the side, across it from just above, or across it from where Cut looks | | Below |
+| Frank · Below · Cut · Above · Wide | The view: from under the water with the moon in front of it (Frank) or behind it (Below), the water cut open from the side, across it from just above, or across it from where Cut looks | | Frank |
 | Wind | Strength of the simulated wind ripples | 0 – 1.2 | 0.45 |
 | Warp | How much the height grid is bent | 0 – 2 | 1 |
 | Waves | Strength of the broad wind sea | 0 – 1.2 | 0.9 |
@@ -153,11 +153,10 @@ The controls sit in the lower right: the sky presets and the four views along th
 | Height | Raises or lowers the moon, in the water or in the sky | −1 – 1 | 0 |
 | Drift | Sends the moon slowly down (left) or up (right) through the frame; once it leaves one edge it comes back in at the other. The sky stays as it is | −1 – 1 | 0 |
 | Halo | Strength of the glow around the big moon (on top of what the sky sets) | 0 – 2 | 1 |
-| Leak | How much scrambled light, and with the moon Behind, the moon itself, leaks into the dark water | 0 – 1 | 0.5 |
+| Leak | How much scrambled light, and in Below the moon itself, leaks into the dark water | 0 – 1 | 0.5 |
 | Murk | How cloudy the water is: the glow around the window's edge and how quickly the distance fades | 0 – 1.5 | 0.7 |
 | Glow | Strength of the bloom | 0 – 2 | 0.6 |
-| In front / Behind | Moon in the water, or up in the sky behind the surface | | In front |
-| Bloom on/off | Turns the bloom off entirely | | on |
+| Bloom on/off | Turns the bloom on or off (a parameter line, shown with P) | | on |
 | Eye light / Side light | In Cut: the light reaching the eye, or god rays seen from the side | | Eye light |
 | ‖ / ▶ (bottom left) | Pauses and resumes: freezes the water and the moon | | playing |
 
@@ -173,7 +172,7 @@ Every control can be set from the address, which is how the screenshots here wer
 ?wind=0.1&waves=0.3&swell=0.3     calm water
 ?wind=1.2&waves=1.2&swell=1.2     rough water
 ?speed=0.3                        slow motion
-?moon=behind                      start with the moon behind the water
+?view=below                       start with the moon behind the water (?moon=behind works too)
 ?height=1                         raise the moon (−1 lowers it)
 ?drift=-0.35                      the moon sinks slowly through the frame and comes back in at the top
 ?halo=0                           no glow around the moon
