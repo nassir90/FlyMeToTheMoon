@@ -879,7 +879,7 @@
   //   scene shows looking that way, and Snell's window on the surface above it) or god rays as seen from
   //   the side (moonlight refracted down, gathered under the broad waves' crests). A light overlay marks the eye.
   //   Above: across the water from just above it, the moon and its path of light on the waves, the
-  //   surface fading into the sky over a long gradient toward the horizon.
+  //   surface fading out only in a narrow band at the horizon, so a low moon sets into the sea.
   // =====================================================================================
   const DEFAULT_MOON = new THREE.Vector3(0, 0.574, 0.819);
   let view = 'below';
@@ -1100,9 +1100,9 @@
         vec3 col = mix(body, skyDome(R, SKY_MOON, 1.0), F);
         col += moonLight() * F * 3.0 * exp((dot(R, SKY_MOON) - 1.0)/0.0025);   // the moon sparkling on the wave facets: its path of light
         col *= 1.0 - clamp(sl.z*0.6, -0.2, 0.3);   // the broad waves' crests and troughs, as in the scene's light bands
-        // toward the horizon the water fades out over a long gradient, so what is beyond it (the sky, and the moon
-        // when it is low) shows through it rather than being painted over
-        gl_FragColor = vec4(col, exp(-dist/70.0));
+        // only right at the horizon does the water fade out (a narrow band, as far off as the water goes), so a low
+        // moon is cut by the sea and shows through just a sliver, rather than being painted over
+        gl_FragColor = vec4(col, 1.0 - smoothstep(320.0, 760.0, dist));
       }`, { transparent: true, depthWrite: false }));
     const aboveSkyScene = new THREE.Scene(); aboveSkyScene.add(dome);
     aboveScene.add(sea);

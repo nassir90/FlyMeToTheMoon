@@ -123,7 +123,7 @@ Two more views put the moon in the sky above the water, where you can move it. B
 
 In both, the moon in the sky is the real one, the same 3D moon as in Below, with its colours, shading and spin, and its light (its beam to the eye, its glint, its path on the sea, the god rays) takes its colour under each sky: teal at night, gold at sunset, copper in the eclipse.
 
-**Above** looks across the water from just above it. The moon hangs over the sea with its path of light broken up on the waves, and the surface fades into the sky over a long gradient toward the horizon. Alt+drag to move the moon; drag it to spin it.
+**Above** looks across the water from just above it. The moon hangs over the sea with its path of light broken up on the waves, and the sea meets the sky at a soft horizon: a low moon sets into it, cut by the water, with only a sliver showing through where the far water fades out. Alt+drag to move the moon; drag it to spin it.
 
 ![Above, at night](docs/screenshots/26-above.jpg)
 
