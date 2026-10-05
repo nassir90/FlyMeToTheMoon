@@ -24,6 +24,7 @@
   .controls {
     position: fixed; right: 20px; bottom: calc(18px + env(safe-area-inset-bottom, 0px));
     display: grid; grid-template-columns: auto var(--line-w, clamp(110px, 18vw, 170px)); column-gap: 14px; row-gap: 4px; align-items: center;
+    max-width: calc(100vw - 40px);
     font-family: var(--font-label); font-size: 15px; color: var(--ink);
     text-transform: uppercase; letter-spacing: 0.04em; text-shadow: 0 0 6px rgba(0, 0, 0, 0.55);
   }
@@ -36,8 +37,9 @@
   .line canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
   .line input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: ew-resize; }
   .line:focus-within { outline: 1px solid var(--ink-faint); outline-offset: 2px; }
-  .buttons { grid-column: 1 / -1; justify-self: end; display: flex; gap: 12px; margin-top: 4px; }
-  .presets { grid-column: 1 / -1; justify-self: end; display: flex; gap: 12px; margin-bottom: 6px; }
+  /* rows of words wrap onto a second line on a narrow screen rather than running off it */
+  .buttons { grid-column: 1 / -1; justify-self: end; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px 12px; margin-top: 4px; }
+  .presets { grid-column: 1 / -1; justify-self: end; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px 12px; margin-bottom: 6px; }
   .presets button { opacity: 0.6; text-shadow: 0 0 4px rgba(0, 0, 0, 0.85), 0 0 10px rgba(0, 0, 0, 0.5); }
   .presets button[aria-pressed="true"] { opacity: 1; }
   .presets button:hover { opacity: 0.8; }
@@ -61,6 +63,8 @@
     <button type="button" data-sky="2" aria-pressed="true"><span class="squeeze">Night</span></button>
     <button type="button" data-sky="3" aria-pressed="false"><span class="squeeze">Midnight</span></button>
     <button type="button" data-sky="4" aria-pressed="false"><span class="squeeze">Eclipse</span></button>
+    <button type="button" data-sky="5" aria-pressed="false"><span class="squeeze">Harvest</span></button>
+    <button type="button" data-sky="6" aria-pressed="false"><span class="squeeze">Blood</span></button>
   </div>
   <div class="presets" role="group" aria-label="View">
     <button type="button" data-view="below" aria-pressed="true"><span class="squeeze">Below</span></button>
@@ -893,10 +897,12 @@
     const U = Object.assign({}, uniforms, own);
     const HEAD = WATER + `
       uniform vec2 uZr, uRes; uniform vec3 uSunDir, uCamPos, uEyeP, uMoonScr, uMoonMul; uniform vec4 uMoonMix; uniform float uSideLight; uniform sampler2D uMoonMap;
-      // the moon's light: the colour of its lit face under the current sky (its average albedo through the preset's
-      // tint and wash, as the moon's own shader does), as bright as its image in the water
+      // the moon's lit face under the current sky: its average albedo through the preset's tint and wash, as the
+      // moon's own shader does. Reflections of it are no brighter than this
+      vec3 moonFaceCol(){ return mix(vec3(0.435, 0.608, 0.604)*uMoonMul, uMoonMix.rgb, uMoonMix.a); }
+      // the moon's light seen through the water (its beam, the god rays): that colour, as bright as its image there
       vec3 moonLight(){
-        vec3 face = mix(vec3(0.435, 0.608, 0.604)*uMoonMul, uMoonMix.rgb, uMoonMix.a);
+        vec3 face = moonFaceCol();
         const vec3 Y = vec3(0.2126, 0.7152, 0.0722);
         return face * dot(uImage, Y) / max(dot(face, Y), 1e-3);
       }
@@ -907,7 +913,7 @@
         vec3 n = vec3(q, sqrt(max(1.0 - dot(q, q), 0.0)));
         vec2 uv = vec2(0.5 + atan(n.x, n.z)/6.2832, 0.5 + asin(clamp(n.y, -1.0, 1.0))/3.1416);
         vec3 a = texture2D(uMoonMap, uv).rgb;
-        return moonLight() * (0.45 + 0.9*dot(a, vec3(0.3, 0.55, 0.15))) * (0.78 + 0.22*n.z);
+        return moonFaceCol() * (0.45 + 0.9*dot(a, vec3(0.3, 0.55, 0.15))) * (0.78 + 0.22*n.z);
       }
       // the scene's sky in direction d, with the moon in direction m: the halo round it as in Below, a little of
       // the sky's glow, and (only in reflections, face > 0) its face as its image in the water is coloured
@@ -1030,7 +1036,7 @@
         vec3 N = normalize(vec3(-g.x, 1.0, -g.y)), Vd = normalize(vP - uCamPos), R = reflect(Vd, N);
         vec3 sky = mix(uSkyLow, uSkyHigh, smoothstep(0.05, 0.9, clamp(R.y + 0.3, 0.0, 1.0)));
         float c = dot(R, uSunDir);
-        sky += uGlowA*exp((c - 1.0)/0.03) + moonLight()*1.6*exp((c - 1.0)/0.006);
+        sky += uGlowA*exp((c - 1.0)/0.03) + moonFaceCol()*exp((c - 1.0)/0.006);
         float F = 0.02 + 0.98*pow(1.0 - max(dot(-Vd, N), 0.0), 5.0);
         vec3 col = mix(hazeColour(vec3(0.0, 0.0, 1.0), 0.6), sky, clamp(0.25 + F, 0.0, 1.0));
         // ...and, with the eye's light, what the eye sees there: Snell's window as a bright circle above it
@@ -1098,7 +1104,7 @@
         float F = 0.02 + 0.98*pow(1.0 - max(dot(-Vd, N), 0.0), 5.0);
         vec3 body = mix(hazeColour(vec3(0.0, 0.0, 1.0), 0.5), murkColour(), 0.25*uMurk);
         vec3 col = mix(body, skyDome(R, SKY_MOON, 1.0), F);
-        col += moonLight() * F * 3.0 * exp((dot(R, SKY_MOON) - 1.0)/0.0025);   // the moon sparkling on the wave facets: its path of light
+        col += moonFaceCol() * F * 1.2 * exp((dot(R, SKY_MOON) - 1.0)/0.0025);   // the moon sparkling on the wave facets: its path of light
         col *= 1.0 - clamp(sl.z*0.6, -0.2, 0.3);   // the broad waves' crests and troughs, as in the scene's light bands
         // only right at the horizon does the water fade out (a narrow band, as far off as the water goes), so a low
         // moon is cut by the sea and shows through just a sliver, rather than being painted over
@@ -1332,6 +1338,16 @@
       skyLow: [0.04,0.025,0.03], skyHigh: [0.05,0.03,0.05], glowA: [0.22,0.06,0.03], glowB: [0.32,0.10,0.05],
       halo: [0.26,0.06,0.03], image: [0.98,0.50,0.28], bloom: [0.85,0.32,0.14],
       moonMul: [1.30,0.48,0.32], moonMix: [0,0,0,0], moonDark: [0.05,0.01,0.01], moonSee: 0, relief: 0.35 },
+    { name: 'Harvest',   // a black sky and a yellow full moon
+      deepL: [0.020,0.018,0.012], deepR: [0.018,0.018,0.016], upLight: [0.012,0.009,0.0],
+      skyLow: [0.012,0.012,0.014], skyHigh: [0.004,0.004,0.006], glowA: [0.16,0.12,0.04], glowB: [0.24,0.18,0.07],
+      halo: [0.20,0.15,0.05], image: [1.0,0.86,0.5], bloom: [1.0,0.8,0.4],
+      moonMul: [2.0,1.3,0.48], moonMix: [1.0,0.84,0.36,0.42], moonDark: [0.03,0.025,0.01], moonSee: 0, relief: 0.2 },
+    { name: 'Blood',     // a black sky and a blood moon
+      deepL: [0.020,0.008,0.008], deepR: [0.016,0.008,0.010], upLight: [0.012,0.0,0.0],
+      skyLow: [0.010,0.006,0.006], skyHigh: [0.003,0.002,0.003], glowA: [0.18,0.04,0.02], glowB: [0.26,0.06,0.03],
+      halo: [0.22,0.04,0.02], image: [0.95,0.40,0.22], bloom: [0.8,0.25,0.1],
+      moonMul: [1.45,0.42,0.26], moonMix: [0,0,0,0], moonDark: [0.04,0.005,0.005], moonSee: 0, relief: 0.35 },
   ];
   let skyValue = 2, skyFrom = 2, skyTo = 2, skyT = 1;
   const presetBtns = [...document.querySelectorAll('[data-sky]')];
@@ -1379,8 +1395,13 @@
     const first = document.querySelector('.presets .squeeze');
     const line = document.querySelector('.line');
     if (!first || !line) return;
-    const w = Math.round(line.getBoundingClientRect().right - first.getBoundingClientRect().left);
-    if (w > 60) controls.style.setProperty('--line-w', w + 'px');
+    // never wider than the screen leaves room for (on a phone the rows of words wrap instead); twice, since
+    // once the lines are narrower the first word may have moved
+    for (let pass = 0; pass < 2; pass++) {
+      const label = line.getBoundingClientRect().left - controls.getBoundingClientRect().left;
+      const w = Math.min(Math.round(line.getBoundingClientRect().right - first.getBoundingClientRect().left), Math.floor(window.innerWidth - 40 - label));
+      if (w > 60) controls.style.setProperty('--line-w', w + 'px');
+    }
   }
   alignLines();
   window.addEventListener('resize', () => { document.getElementById('controls').style.removeProperty('--line-w'); alignLines(); });
@@ -1393,7 +1414,7 @@
   }
   if (q.has('sky')) {
     const v = q.get('sky'), named = SKIES.findIndex(k => k.name.toLowerCase() === v.toLowerCase());
-    goToSky(named >= 0 ? named : Math.min(4, Math.max(0, parseFloat(v) || 0)), true);
+    goToSky(named >= 0 ? named : Math.min(SKIES.length - 1, Math.max(0, parseFloat(v) || 0)), true);
   }
   if (q.get('bloom') === '0') bloomBtn.click();
   if (/^(behind|above|sky)$/.test(q.get('moon') || '')) { moonBtn.click(); aboveT = 1; }

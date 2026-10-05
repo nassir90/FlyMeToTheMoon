@@ -82,7 +82,7 @@ The **Height** line raises or lowers the moon, in the water or in the sky. Lower
 
 ### The sky
 
-Five sky presets, at the top of the controls, set the time of day. Every colour in the scene comes from one palette: the water on both sides, the light falling from above, the sky seen through the surface and the glow around the moon in it, the reflection and its bloom, the halo, and the moon's own tint, shadow and crater relief. Pressing a preset fades every colour across to the new look over about a second.
+Seven sky presets, at the top of the controls, set the time of day and the kind of moon. Every colour in the scene comes from one palette: the water on both sides, the light falling from above, the sky seen through the surface and the glow around the moon in it, the reflection and its bloom, the halo, and the moon's own tint, shadow and crater relief. Pressing a preset fades every colour across to the new look over about a second.
 
 **Day:** a bright blue sky through the surface and teal water. The moon is washed almost white, and the glow around it all but disappears.
 
@@ -103,6 +103,16 @@ Five sky presets, at the top of the controls, set the time of day. Every colour 
 **Eclipse:** a blood moon. The moon turns copper-red, and its reflection glows orange against dark red water.
 
 ![Eclipse](docs/screenshots/16-sky-eclipse.jpg)
+
+**Harvest:** a yellow full moon in a black sky, with a golden path on black water.
+
+![Harvest](docs/screenshots/28-sky-harvest.jpg)
+
+![Harvest, from above the water](docs/screenshots/30-above-harvest.jpg)
+
+**Blood:** a blood moon in a black sky.
+
+![Blood](docs/screenshots/29-sky-blood.jpg)
 
 Halfway through the fade from Day to Sunset:
 
@@ -137,7 +147,7 @@ The controls sit in the lower right: the sky presets and the three views along t
 
 | Control | What it does | Range | Default |
 |---|---|---|---|
-| Day · Sunset · Night · Midnight · Eclipse | Sky presets; pressing one fades the scene to it | | Night |
+| Day · Sunset · Night · Midnight · Eclipse · Harvest · Blood | Sky presets; pressing one fades the scene to it | | Night |
 | Below · Cut · Above | The view: from under the water, the water cut open from the side, or across it from above | | Below |
 | Wind | Strength of the simulated wind ripples | 0 – 1.2 | 0.45 |
 | Warp | How much the height grid is bent | 0 – 2 | 1 |
@@ -162,8 +172,8 @@ Tap the water to drop a ripple, or drag across it to stir. In every view: drag t
 Every control can be set from the address, which is how the screenshots here were made:
 
 ```
-?sky=sunset                       a look by name (day, sunset, night, midnight, eclipse)
-?sky=0.5                          or any point between them (0 = day ... 4 = eclipse), no fade
+?sky=sunset                       a look by name (day, sunset, night, midnight, eclipse, harvest, blood)
+?sky=0.5                          or any point between them (0 = day ... 6 = blood), no fade
 ?wind=0.1&waves=0.3&swell=0.3     calm water
 ?wind=1.2&waves=1.2&swell=1.2     rough water
 ?speed=0.3                        slow motion
