@@ -108,9 +108,9 @@ Halfway through the fade from Day to Sunset:
 
 ![Between day and sunset](docs/screenshots/17-sky-between.jpg)
 
-### Cut and Above
+### Cut, Above and Wide
 
-Two more views put the moon in the sky above the water, where you can move it. Both are drawn with the scene's own code, so they show the same water: the surface is the same simulated ripples, swells and waves, the light is computed the same way, and every colour follows the sky preset.
+Three more views put the moon in the sky above the water, where you can move it. All are drawn with the scene's own code, so they show the same water: the surface is the same simulated ripples, swells and waves, the light is computed the same way, and every colour follows the sky preset.
 
 **Cut** opens the water up and looks at it from the side. The camera's eye sits under the surface; drag it about. As everywhere, drag the moon to spin it, Alt+drag to move it, and tap the water to drop a ripple. The water is lit one of two ways (the **Eye light** / **Side light** button):
 
@@ -121,7 +121,7 @@ Two more views put the moon in the sky above the water, where you can move it. B
 
 ![Cut, with god rays seen from the side](docs/screenshots/25-cut-side.jpg)
 
-In both, the moon in the sky is the real one, the same 3D moon as in Below, with its colours, shading and spin, and its light (its beam to the eye, its glint, its path on the sea, the god rays) takes its colour under each sky: teal at night, gold at sunset, copper in the eclipse.
+In all of them, the moon in the sky is the real one, the same 3D moon as in Below, with its colours, shading and spin, and its light (its beam to the eye, its glint, its path on the sea, the god rays) takes its colour under each sky: teal at night, gold at sunset, copper in the eclipse.
 
 **Above** looks across the water from just above it. The moon hangs over the sea with its path of light broken up on the waves, and the sea meets the sky at a soft horizon: a low moon sets into it, cut by the water, with only a sliver showing through where the far water fades out. Alt+drag to move the moon; drag it to spin it.
 
@@ -129,16 +129,22 @@ In both, the moon in the sky is the real one, the same 3D moon as in Below, with
 
 ![Above, at sunset](docs/screenshots/27-above-sunset.jpg)
 
+**Wide** looks the way Cut does, from about where its camera is, but at the water whole rather than cut open, lit as in Above: the sky and moon reflected on the waves and a path of moonlight. It starts with the moon where it was on screen in Cut. In Cut too, a moon lowered far enough sets behind the horizon.
+
+![Wide, at night](docs/screenshots/28-wide.jpg)
+
+![Wide, at sunset](docs/screenshots/29-wide-sunset.jpg)
+
 ## Controls
 
-The controls sit in the lower right: the sky presets and the three views along the top, then plain white lines that reach left to line up under the first preset, solid up to the current value and blending quickly into a faint line that barely wobbles, then a row of buttons. Drag along a line, or focus it and use the arrow keys. Press **H** to hide or show the controls.
+The controls sit in the lower right: the sky presets and the four views along the top, then plain white lines that reach left to line up under the first preset, solid up to the current value and blending quickly into a faint line that barely wobbles, then a row of buttons. Drag along a line, or focus it and use the arrow keys. Press **H** to hide or show the controls.
 
 ![The line controls](docs/screenshots/11-controls.jpg)
 
 | Control | What it does | Range | Default |
 |---|---|---|---|
 | Day · Sunset · Night · Midnight · Eclipse | Sky presets; pressing one fades the scene to it | | Night |
-| Below · Cut · Above | The view: from under the water, the water cut open from the side, or across it from above | | Below |
+| Below · Cut · Above · Wide | The view: from under the water, the water cut open from the side, across it from just above, or across it from where Cut looks | | Below |
 | Wind | Strength of the simulated wind ripples | 0 – 1.2 | 0.45 |
 | Warp | How much the height grid is bent | 0 – 2 | 1 |
 | Waves | Strength of the broad wind sea | 0 – 1.2 | 0.9 |
@@ -175,7 +181,7 @@ Every control can be set from the address, which is how the screenshots here wer
 ?murk=0                           clear water (1.5 is very cloudy)
 ?bloom=0                          bloom off
 ?turn=140                         turn the moon 140° to start
-?view=cut                         the water cut open from the side (?view=above: across it from above)
+?view=cut                         the water cut open from the side (?view=above, ?view=wide: across it)
 ?light=side                       in Cut, god rays seen from the side
 ?ui=0                             hide the controls
 ```

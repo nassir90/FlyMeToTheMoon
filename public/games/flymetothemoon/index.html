@@ -19,8 +19,8 @@
   #scene { position: fixed; inset: 0; display: block; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
   #scene.over-moon { cursor: grab; }
   #scene.grabbing { cursor: grabbing; }
-  #scene.view-cut, #scene.view-above { cursor: default; }
-  #scene.view-cut.over-moon, #scene.view-above.over-moon { cursor: grab; }
+  #scene.view-cut, #scene.view-sea { cursor: default; }
+  #scene.view-cut.over-moon, #scene.view-sea.over-moon { cursor: grab; }
   .controls {
     position: fixed; right: 20px; bottom: calc(18px + env(safe-area-inset-bottom, 0px));
     display: grid; grid-template-columns: auto var(--line-w, clamp(110px, 18vw, 170px)); column-gap: 14px; row-gap: 4px; align-items: center;
@@ -68,6 +68,7 @@
     <button type="button" data-view="below" aria-pressed="true"><span class="squeeze">Below</span></button>
     <button type="button" data-view="cut" aria-pressed="false"><span class="squeeze">Cut</span></button>
     <button type="button" data-view="above" aria-pressed="false"><span class="squeeze">Above</span></button>
+    <button type="button" data-view="wide" aria-pressed="false"><span class="squeeze">Wide</span></button>
   </div>
   <label for="wind"><span class="squeeze">Wind</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="wind" type="range" min="0" max="1.2" step="0.01" value="0.45"></div>
   <label for="warp"><span class="squeeze">Warp</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="warp" type="range" min="0" max="2" step="0.01" value="1"></div>
@@ -880,13 +881,15 @@
   //   face shows either the light reaching the eye (a fan converging on it, each direction the colour the
   //   scene shows looking that way, and Snell's window on the surface above it) or god rays as seen from
   //   the side (moonlight refracted down, gathered under the broad waves' crests). A light overlay marks the eye.
+  //   Wide: looking the way Cut does, from about where its camera is, but with the water whole (not cut open),
+  //   lit as in Above; it starts with the moon where it was on screen in Cut.
   //   Above: across the water from just above it, the moon and its path of light on the waves, the
   //   surface fading out only in a narrow band at the horizon, so a low moon sets into the sea.
   // =====================================================================================
   const DEFAULT_MOON = new THREE.Vector3(0, 0.574, 0.819);
   let view = 'below';
   const views = (() => {
-    const V = { eyeZ: 0, eyeDepth: 3, cutMoon: [3.15, 5.7], side: false, aboveMoon: new THREE.Vector3(0, 0.16, 1).normalize() };
+    const V = { eyeZ: 0, eyeDepth: 3, cutMoon: [3.15, 5.7], side: false, wideMoon: new THREE.Vector3(0.3, 0.2, 1).normalize(), aboveMoon: new THREE.Vector3(0, 0.16, 1).normalize() };
     const own = {
       uZr: { value: new THREE.Vector2() }, uSunDir: { value: new THREE.Vector3() }, uCamPos: { value: new THREE.Vector3() },
       uEyeP: { value: new THREE.Vector3(0, -3, 0) }, uMoonScr: { value: new THREE.Vector3() }, uSideLight: { value: 0 },
@@ -974,7 +977,7 @@
     // the moon in Cut sits where it was put, on the cut's plane, above the water; its light comes from there as seen
     // from the surface above the eye, so the eye's beam always points at it
     const cutMoonWorld = () => [0, V.cutMoon[0], V.cutMoon[1]];
-    const cutMoonDir = () => { const y = V.cutMoon[0], z = V.cutMoon[1] - V.eyeZ, l = Math.hypot(y, z); return [0, y / l, z / l]; };
+    const cutMoonDir = () => { const y = Math.max(V.cutMoon[0], 0.05), z = V.cutMoon[1] - V.eyeZ, l = Math.hypot(y, z); return [0, y / l, z / l]; };   // set: light from the horizon
     const cutScene = new THREE.Scene();
     const NF = 1200, NZ = 300, NX = 15, MID = -3.5, DEEP = -80;
     const geom = (n) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3)); return g; };
@@ -1039,7 +1042,7 @@
         vec3 col = mix(hazeColour(vec3(0.0, 0.0, 1.0), 0.6), sky, clamp(0.25 + F, 0.0, 1.0));
         // ...and, with the eye's light, what the eye sees there: Snell's window as a bright circle above it
         if (uSideLight < 0.5) { vec4 L = lookAlong(normalize(vP - uEyeP), 0.5); col = mix(col, L.rgb + moonLight()*L.w, 0.85); }
-        gl_FragColor = vec4(col, 1.0 - smoothstep(2.6, 5.0, vP.x));   // the far side fades into the sky
+        gl_FragColor = vec4(col, 1.0 - smoothstep(4.0, 5.0, vP.x));   // the far edge fades into the sky
       }`, { transparent: true, depthWrite: false });
     const skyPlane = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), cutSky); skyPlane.rotation.y = -Math.PI / 2; skyPlane.position.set(300, 0, 0);
     const cutSkyScene = new THREE.Scene(); cutSkyScene.add(skyPlane);
@@ -1073,7 +1076,9 @@
       renderer.render(cutSkyScene, cutCam);
       const mc = new THREE.Vector3(...M), rpx = Math.min(innerWidth, innerHeight) * 0.07;
       V.moonR = rpx;
-      drawMoon(cutCam, mc, rpx * mc.distanceTo(cutCam.position) * 2 * Math.tan(THREE.MathUtils.degToRad(cutCam.fov / 2)) / innerHeight);
+      // drawn far behind the water (the same place and size on screen), so lowered it sets behind the horizon
+      const k = (40 - cutCam.position.x) / (mc.x - cutCam.position.x), far = cutCam.position.clone().lerp(mc, k);
+      drawMoon(cutCam, far, rpx * far.distanceTo(cutCam.position) * 2 * Math.tan(THREE.MathUtils.degToRad(cutCam.fov / 2)) / innerHeight);
       renderer.render(cutScene, cutCam);
       drawCutOverlay();
     }
@@ -1114,44 +1119,66 @@
       aboveCam.aspect = innerWidth / innerHeight; aboveCam.position.set(0, 2.2, 0); aboveCam.lookAt(0, 2.2 - Math.tan(0.14) * 10, 10);
       aboveCam.updateProjectionMatrix(); aboveCam.updateMatrixWorld();
     }
-    function renderAbove() {
-      placeAbove();
-      uniforms.uEyeDepth.value = 3; uniforms.uEyeOff.value.set(0, 0); uniforms.uSkyMoon.value.copy(V.aboveMoon);
-      own.uCamPos.value.copy(aboveCam.position); own.uEyeP.value.set(0, -3, 0);
-      dome.position.copy(aboveCam.position); sea.position.set(aboveCam.position.x, 0, aboveCam.position.z);
+    // Wide: from about where Cut's camera is, looking the same way, but tilted up enough to see the horizon
+    const wideCam = new THREE.PerspectiveCamera(52, 1, 0.1, 2000);
+    function placeWide() {
+      placeCut();
+      const p = cutCam.position;
+      wideCam.aspect = innerWidth / innerHeight; wideCam.position.copy(p); wideCam.lookAt(p.x + 10, p.y - Math.tan(0.16) * 10, p.z);
+      wideCam.updateProjectionMatrix(); wideCam.updateMatrixWorld();
+    }
+    // entering Wide: the moon where it was on screen in Cut
+    V.enterWide = () => {
+      placeWide();
+      const ms = toScreen(...cutMoonWorld(), cutCam);
+      v3.set(ms[0] / innerWidth * 2 - 1, -(ms[1] / innerHeight) * 2 + 1, 0.5).unproject(wideCam).sub(wideCam.position).normalize();
+      if (v3.y < 0.02) { v3.y = 0.02; v3.normalize(); }
+      V.wideMoon.copy(v3);
+    };
+    const seaCam = () => (view === 'wide' ? wideCam : aboveCam), seaMoon = () => (view === 'wide' ? V.wideMoon : V.aboveMoon);
+    function renderSea() {
+      if (view === 'wide') placeWide(); else placeAbove();
+      const cam = seaCam(), m = seaMoon();
+      uniforms.uEyeDepth.value = 3; uniforms.uEyeOff.value.set(0, 0); uniforms.uSkyMoon.value.copy(m);
+      own.uCamPos.value.copy(cam.position); own.uEyeP.value.set(0, -3, 0);
+      dome.position.copy(cam.position); sea.position.set(cam.position.x, 0, cam.position.z);
       renderer.setRenderTarget(null); renderer.clear();
-      renderer.render(aboveSkyScene, aboveCam);
-      drawMoon(aboveCam, aboveCam.position.clone().addScaledVector(V.aboveMoon, 600), 600 * Math.sqrt(1 - 0.995 * 0.995));   // the scene's own size (MOON_COS)
-      renderer.render(aboveScene, aboveCam);
-      const ms = toScreen(...aboveCam.position.clone().addScaledVector(V.aboveMoon, 100).toArray(), aboveCam);
+      renderer.render(aboveSkyScene, cam);
+      drawMoon(cam, cam.position.clone().addScaledVector(m, 600), 600 * Math.sqrt(1 - 0.995 * 0.995));   // the scene's own size (MOON_COS)
+      renderer.render(aboveScene, cam);
+      const ms = toScreen(...cam.position.clone().addScaledVector(m, 100).toArray(), cam);
       V.moonScr = ms;
-      V.moonR = Math.tan(Math.acos(0.995)) * innerHeight / (2 * Math.tan(THREE.MathUtils.degToRad(aboveCam.fov / 2)));
+      V.moonR = Math.tan(Math.acos(0.995)) * innerHeight / (2 * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2)));
       if (ov.width) { og.setTransform(1, 0, 0, 1, 0, 0); og.clearRect(0, 0, ov.width, ov.height); }
     }
 
-    // ---- pointer: in Cut, drag the eye, or drag anywhere else to move the moon; in Above, drag to move the moon ----
+    // ---- pointer: drag the moon to spin it, Alt+drag to move it, tap or drag the water to stir; in Cut, drag the eye ----
     let drag = null;
     const nearEye = (e) => V.eyeScr && Math.hypot(e.clientX - V.eyeScr[0], e.clientY - V.eyeScr[1]) < 28;
     const nearMoon = (e) => V.moonScr && Math.hypot(e.clientX - V.moonScr[0], e.clientY - V.moonScr[1]) < V.moonR * 1.1;
     // a tap on the water drops a ripple where it lands: in Above, on the surface ahead; in Cut, on the cut's waterline
     function stir(e, strength) {
-      if (view === 'above') {
-        v3.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1, 0.5).unproject(aboveCam).sub(aboveCam.position).normalize();
-        if (v3.y < -0.01) { const t = -aboveCam.position.y / v3.y; dropAtXZ(aboveCam.position.x + v3.x * t, aboveCam.position.z + v3.z * t, strength); }
+      if (view !== 'cut') {
+        const cam = seaCam();
+        v3.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1, 0.5).unproject(cam).sub(cam.position).normalize();
+        if (v3.y < -0.01) { const t = -cam.position.y / v3.y; dropAtXZ(cam.position.x + v3.x * t, cam.position.z + v3.z * t, strength); }
       } else {
         const [y, z] = onCut(e.clientX, e.clientY);
         if (Math.abs(y) < 1.2) dropAtXZ(0, z, strength);
       }
     }
     function apply(e) {
+      if (!innerWidth || !innerHeight) return;
       if (view === 'cut') {
         const [y, z] = onCut(e.clientX, e.clientY);
+        if (!Number.isFinite(y) || !Number.isFinite(z)) return;
         if (drag === 'eye') { V.eyeDepth = Math.max(0.5, Math.min(7, -y)); V.eyeZ = Math.max(zr[0] + 2, Math.min(zr[1] - 2, z)); }
-        else { V.cutMoon = [Math.max(0.6, y + grab[0]), z + grab[1]]; }
+        else { V.cutMoon = [Math.max(-3, y + grab[0]), z + grab[1]]; }
       } else {
-        v3.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1, 0.5).unproject(aboveCam).sub(aboveCam.position).normalize();
-        const el = Math.max(0.02, Math.min(1.2, Math.asin(v3.y))), az = Math.atan2(v3.x, v3.z);
-        V.aboveMoon.set(Math.cos(el) * Math.sin(az), Math.sin(el), Math.cos(el) * Math.cos(az));
+        const cam = seaCam();
+        v3.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1, 0.5).unproject(cam).sub(cam.position).normalize();
+        const el = Math.max(-0.08, Math.min(1.2, Math.asin(v3.y))), az = Math.atan2(v3.x, v3.z);   // down to just below the horizon: it sets
+        seaMoon().set(Math.cos(el) * Math.sin(az), Math.sin(el), Math.cos(el) * Math.cos(az));
       }
     }
     let grab = [0, 0];
@@ -1169,7 +1196,7 @@
     });
     canvas.addEventListener('pointermove', e => {
       if (view === 'below') return;
-      if (grabbing) spinMove(e, view === 'cut' ? cutCam : aboveCam, V.moonR);
+      if (grabbing) spinMove(e, view === 'cut' ? cutCam : seaCam(), V.moonR);
       else if (drag === 'stir') { if (Math.hypot(e.clientX - last.x, e.clientY - last.y) > 10) { stir(e, 0.01); last = { x: e.clientX, y: e.clientY, t: performance.now() }; } }
       else if (drag) apply(e);
       else canvas.classList.toggle('over-moon', nearEye(e) || nearMoon(e));
@@ -1177,7 +1204,7 @@
     const end = () => { if (drag) { drag = null; canvas.classList.remove('grabbing'); } };
     canvas.addEventListener('pointerup', end); canvas.addEventListener('pointercancel', end);
 
-    V.render = () => (view === 'cut' ? renderCut() : renderAbove());
+    V.render = () => (view === 'cut' ? renderCut() : renderSea());
     V.leave = () => {   // back to Below: the scene's own eye and moon
       uniforms.uEyeDepth.value = 3; uniforms.uEyeOff.value.set(0, 0); uniforms.uSkyMoon.value.copy(DEFAULT_MOON);
       if (ov.width) { og.setTransform(1, 0, 0, 1, 0, 0); og.clearRect(0, 0, ov.width, ov.height); }
@@ -1188,7 +1215,8 @@
   function setView(v) {
     view = v;
     viewBtns.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === v)));
-    canvas.classList.toggle('view-cut', v === 'cut'); canvas.classList.toggle('view-above', v === 'above'); canvas.classList.remove('over-moon', 'grabbing');
+    canvas.classList.toggle('view-cut', v === 'cut'); canvas.classList.toggle('view-sea', v === 'above' || v === 'wide'); canvas.classList.remove('over-moon', 'grabbing');
+    if (v === 'wide') views.enterWide();
     lightBtn.hidden = v !== 'cut';
     if (v === 'below') views.leave();
     tightenRows();
@@ -1408,7 +1436,7 @@
   if (/^(behind|above|sky)$/.test(q.get('moon') || '')) { moonBtn.click(); aboveT = 1; }
   if (q.has('turn')) rotateBy(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(parseFloat(q.get('turn')) || 0));
   if (q.get('ui') === '0') document.getElementById('controls').classList.add('hidden-ui');
-  if (/^(cut|above)$/.test(q.get('view') || '')) setView(q.get('view'));
+  if (/^(cut|above|wide)$/.test(q.get('view') || '')) setView(q.get('view'));
   if (q.get('light') === 'side') lightBtn.click();
 
   // H hides and shows the controls
