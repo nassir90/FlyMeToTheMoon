@@ -137,7 +137,7 @@ In all of them, the moon in the sky is the real one, the same 3D moon as in Belo
 
 ## Controls
 
-The controls sit in the lower right: the sky presets and the five views along the top, then plain white lines that reach left to line up under the first preset, solid up to the current value and blending quickly into a faint line that barely wobbles, then a row of buttons. The lines are hidden to begin with: press **P** to show or hide them. Drag along a line, or focus it and use the arrow keys. Press **H** to hide or show all the controls. Only the controls that do something in the current view are shown: Height, Drift and Bloom are Frank's and Below's, Glow shows only with the bloom on, Leak only where the camera under the water is looking (Frank, Below, and Cut with the eye's light), and Light only in Cut.
+The controls sit in the lower right: the sky presets and the five views along the top, then plain white lines that reach left to line up under the first preset, solid up to the current value and blending quickly into a faint line that barely wobbles. Pause and play is the icon in the bottom left. The lines are hidden to begin with: press **P** to show or hide them. Drag along a line, or focus it and use the arrow keys. Press **H** to hide or show all the controls. Only the controls that do something in the current view are shown: Height, Drift and Bloom are Frank's and Below's, Glow shows only with the bloom on, Leak only where the camera under the water is looking (Frank, Below, and Cut with the eye's light), and Light only in Cut.
 
 ![The line controls](docs/screenshots/11-controls.jpg)
 
