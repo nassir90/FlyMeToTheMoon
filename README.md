@@ -62,6 +62,10 @@ The **In front** button sends the moon up behind the surface (it then reads **Be
 
 ![The moon behind the water by day](docs/screenshots/19-moon-behind-day.jpg)
 
+The **Height** line raises or lowers the moon, in the water or in the sky. Lowered behind the surface, it sinks into the waterline and is cut off where the window ends.
+
+![The moon raised](docs/screenshots/20-height.jpg)
+
 ### The sky
 
 Five sky presets, at the top of the controls, set the time of day. Every colour in the scene comes from one palette: the water on both sides, the light falling from above, the sky seen through the surface and the glow around the moon in it, the reflection and its bloom, the halo, and the moon's own tint, shadow and crater relief. Pressing a preset fades every colour across to the new look over about a second.
@@ -104,6 +108,7 @@ The controls sit in the lower right: the sky presets along the top, then plain w
 | Waves | Strength of the broad wind sea | 0 – 1.2 | 0.9 |
 | Swell | Strength of the long swells | 0 – 1.2 | 0.8 |
 | Speed | How fast all the water moves (also slows the simulation) | 0.1 – 1.5 | 0.6 |
+| Height | Raises or lowers the moon, in the water or in the sky | −1 – 1 | 0 |
 | Halo | Strength of the glow around the big moon (on top of what the sky sets) | 0 – 2 | 1 |
 | Glow | Strength of the bloom | 0 – 2 | 0.6 |
 | In front / Behind | Moon in the water, or up in the sky behind the surface | | In front |
@@ -123,6 +128,7 @@ Every control can be set from the address, which is how the screenshots here wer
 ?wind=1.2&waves=1.2&swell=1.2     rough water
 ?speed=0.3                        slow motion
 ?moon=behind                      start with the moon behind the water
+?height=1                         raise the moon (−1 lowers it)
 ?halo=0                           no glow around the moon
 ?bloom=0                          bloom off
 ?turn=140                         turn the moon 140° to start
