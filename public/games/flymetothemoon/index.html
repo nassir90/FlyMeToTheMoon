@@ -76,11 +76,11 @@
     <button type="button" data-sky="4" aria-pressed="false"><span class="squeeze">Eclipse</span></button>
   </div>
   <div class="presets" role="group" aria-label="View">
-    <button type="button" data-view="frank" aria-pressed="true"><span class="squeeze">Frank</span></button>
-    <button type="button" data-view="below" aria-pressed="false"><span class="squeeze">Below</span></button>
     <button type="button" data-view="cut" aria-pressed="false"><span class="squeeze">Cut</span></button>
-    <button type="button" data-view="above" aria-pressed="false"><span class="squeeze">Above</span></button>
     <button type="button" data-view="wide" aria-pressed="false"><span class="squeeze">Wide</span></button>
+    <button type="button" data-view="above" aria-pressed="false"><span class="squeeze">Above</span></button>
+    <button type="button" data-view="below" aria-pressed="false"><span class="squeeze">Below</span></button>
+    <button type="button" data-view="frank" aria-pressed="true"><span class="squeeze">Frank</span></button>
   </div>
   <label for="wind"><span class="squeeze">Wind</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="wind" type="range" min="0" max="1.2" step="0.01" value="0.45"></div>
   <label for="warp"><span class="squeeze">Warp</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="warp" type="range" min="0" max="2" step="0.01" value="1"></div>
@@ -1055,16 +1055,20 @@
     const ov = document.getElementById('overlay'), og = ov.getContext('2d');
 
     // ---- the camera above the water ----
-    // Above, Wide and Cut share one spot, back from and above the eye under the water, looking the same way (+z):
-    // Wide is level with the horizon and zoomed out, Above the same zoomed in, Cut is Wide with the water cut open by a
-    // plane through the eye, square to the view (z = CUT_Z), the water nearer than it taken away.
-    const LEVEL = 0.10, CUT_Z = 0;
+    // Above, Wide and Cut share one spot, straight above the camera under the water (so going under is straight down),
+    // looking the same way (+z): Wide is level with the horizon and zoomed out, Above the same zoomed in, Cut is Wide
+    // with the water cut open by a plane ahead of it, square to the view (z = CUT_Z), the water nearer than it taken
+    // away. The eye drawn in the cut only illustrates the light reaching a point under the water.
+    const LEVEL = 0.10;
+    let CUT_Z = 0;
     const aboveCam = new THREE.PerspectiveCamera(30, 1, 0.1, 2000), wideCam = new THREE.PerspectiveCamera(52, 1, 0.1, 2000);
     function rigSpot() {
       const asp = innerWidth / innerHeight, tv = Math.tan(THREE.MathUtils.degToRad(19));
       const dist = Math.max(19, 6.5 / (tv * asp)), pitch = THREE.MathUtils.degToRad(22), ly = asp < 1 ? -0.6 : -1.5;
-      return new THREE.Vector3(0, ly + dist * Math.sin(pitch), -dist * Math.cos(pitch));
+      CUT_Z = dist * Math.cos(pitch);
+      return new THREE.Vector3(0, ly + dist * Math.sin(pitch), 0);
     }
+    rigSpot();
     function placeRig(cam, fov) {
       const p = rigSpot();
       cam.aspect = innerWidth / innerHeight; cam.fov = fov; cam.clearViewOffset(); cam.position.copy(p);
@@ -1105,7 +1109,7 @@
       uniforms.uCutZ.value = cutZ; uniforms.uSideLight.value = V.side ? 1 : 0; uniforms.uCutEye.value.copy(eyeAt());
       uniforms.uSlabY.value = slabY; uniforms.uCutOpen.value = Math.min(1, Math.max(0, -slabY / 2));
       // in the air: above the sea, or below its level in the gap the cut leaves
-      const air = cam.position.y >= 0 || (cutZ > -1e8 && cam.position.z < cutZ);
+      const air = cam.position.y >= 0 || (cutZ > -1e8 && cam.position.z < cutZ && cam.position.y > slabY);
       uniforms.uCamAir.value = air ? 1 : 0;
       if (cutZ > -1e8) { uniforms.uEyeDepth.value = V.eyeDepth; uniforms.uEyeOff.value.set(V.eyeX, CUT_Z); uniforms.uSkyMoon.value.copy(m); }
       const under = !air, moonAt = cam.position.clone().addScaledVector(m, 600), r = 600 * sinR;
@@ -1155,9 +1159,9 @@
     // ---- moving between views ----
     // One camera moves through one world and the moon moves with it; nothing is blended. Each view ends on a camera
     // pose (position, direction, zoom and where its axis lands on screen) and a moon (direction, size, and whether it
-    // is drawn in front of the water, as Frank's is). Above <-> Wide zooms; to or from Cut the cut sweeps through the
-    // water, from the camera out to its place (or back); to Frank or Below the camera flies down through the surface
-    // to the eye, turning to look up, and back out the same way. Frank and Below glide into each other as before.
+    // is drawn in front of the water, as Frank's is). Above <-> Wide zooms; into Cut the water in front of the cut falls
+    // away as a slab (and rises back on the way out); to Frank or Below the camera goes straight down through the
+    // surface and turns to look up, and back out the same way. Frank and Below glide into each other as before.
     const tc = new THREE.PerspectiveCamera(50, 1, 0.1, 2000);
     const poseOf = (cam, off) => ({ pos: cam.position.clone(), quat: cam.quaternion.clone(), fov: cam.fov, off: off || new THREE.Vector2() });
     function eyePose() {   // the camera under the water, as Frank and Below have it (its axis lands on the anchor)
@@ -1221,30 +1225,28 @@
       // kr: how far the camera has turned (and its lens and the moon have changed) toward the end view
       let kr = k;
       tc.position.copy(a.pose.pos).lerp(b.pose.pos, k);
-      // Between Cut and the eye under the water, the camera dives: on over the gap and past the cut, still looking
-      // ahead, down through the surface beyond it (the water there is whole), and only once under does it turn up to
-      // look through the surface; coming out it levels off under the water first, then surfaces. Never through the face.
-      if ((a.under || b.under) && (a.cut || b.cut)) {
-        const dive = !!b.under, q1 = new THREE.Vector3(0, 2, CUT_Z + 6), q2 = new THREE.Vector3(0, -3, CUT_Z + 5);
-        const [c1, c2] = dive ? [q1, q2] : [q2, q1], u = 1 - k;
-        tc.position.copy(a.pose.pos).multiplyScalar(u * u * u).addScaledVector(c1, 3 * u * u * k)
-          .addScaledVector(c2, 3 * u * k * k).addScaledVector(b.pose.pos, k * k * k);
-        kr = ease(dive ? (k - 0.5) / 0.5 : k / 0.5);
+      // Going under, the camera goes straight down still looking ahead, and only once through the surface turns up
+      // to look through it; coming out it levels off under the water first, then rises straight up.
+      if ((a.under || b.under) && a.pose.pos.y * b.pose.pos.y < 0) {
+        const kc = a.pose.pos.y / (a.pose.pos.y - b.pose.pos.y);   // where on the way it meets the surface
+        kr = ease(b.under ? (k - kc) / (1 - kc) : k / kc);
       }
       tc.quaternion.copy(a.pose.quat).slerp(b.pose.quat, kr);
       tc.fov = a.pose.fov + (b.pose.fov - a.pose.fov) * kr; tc.aspect = innerWidth / innerHeight;
       const off = a.pose.off.clone().lerp(b.pose.off, kr);
       tc.setViewOffset(W, H, -off.x, off.y, W, H); tc.updateProjectionMatrix(); tc.updateMatrixWorld();
-      // The cut. Between Cut and a view under the water, the water in front of it is simply never there: the camera
-      // dives past it into the whole water beyond. Between Cut and Above or Wide, that water is a slab that
-      // falls away under its own weight (or rises back into place).
+      // The cut. Going into Cut, the water in front of it is a slab that falls away under its own weight; coming out of
+      // Cut it rises back into place.
+      // (to or from the water, the slab is back in place before the camera goes down into it, and falls only once
+      // it has come up out of it)
       let cutZ = -1e9, slabY = -1e9;
       if (a.cut || b.cut) {
         cutZ = CUT_Z;
-        if (!(a.cut && b.cut) && !a.under && !b.under) {
-          const G = 60, t = (b.cut ? s - 0.1 : 0.9 - s) * T.dur;   // seconds into the fall (or before the end of the rise)
+        if (!(a.cut && b.cut)) {
+          const G = 60, t = (b.cut ? s - (a.under ? 0.5 : 0.1) : (b.under ? 0.45 : 0.9) - s) * T.dur;   // seconds into the fall (or before the end of the rise)
           slabY = t <= 0 ? 0 : -0.5 * G * t * t;
           if (slabY < -60) slabY = -1e9;
+          if (slabY === 0 && tc.position.y < 0) cutZ = slabY = -1e9;   // under whole water: no cut to see
         }
       }
       // the moon, moving with it
