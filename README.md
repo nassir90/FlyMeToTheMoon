@@ -112,7 +112,7 @@ Halfway through the fade from Day to Sunset:
 
 Three more views put the moon in the sky above the water, where you can move it. All are drawn with the scene's own code, so they show the same water: the surface is the same simulated ripples, swells and waves, the light is computed the same way, and every colour follows the sky preset.
 
-**Cut** opens the water up and looks at it from the side. The camera's eye sits under the surface; drag it about. As everywhere, drag the moon to spin it, Alt+drag to move it, and tap the water to drop a ripple. The water is lit one of two ways (the **Light** parameter, Eye or Side, shown with P):
+**Cut** is Wide's shot with the water cut open: a plane through the eye of the camera under the water, square to the view, and the water in front of it taken away, so you look into the sea from the side while its surface carries on to the horizon. The eye sits exactly where Frank's and Below's camera does; drag it about in the face. As everywhere, drag the moon to spin it, Alt+drag to move it, and tap the water to drop a ripple. The face is lit one of two ways (the **Light** parameter, Eye or Side, shown with P):
 
 - **Eye light**: the light reaching the eye. Every direction from it glows with exactly what the scene shows the camera looking that way, so a fan of light converges on the eye: the sky through Snell's window, the moon's image as its brightest beam, and darkness past the critical angle, all moving with the waves. On the surface above, the same light draws the window as a bright circle.
 - **Side light**: god rays as you'd see them from the side: moonlight refracted down into the water and gathered under the broad waves' crests, shafts with depth that fade as they go down.
@@ -129,7 +129,7 @@ In all of them, the moon in the sky is the real one, the same 3D moon as in Belo
 
 ![Above, at sunset](docs/screenshots/27-above-sunset.jpg)
 
-**Wide** looks the way Cut does, from about where its camera is, but at the water whole rather than cut open, lit as in Above: the sky and moon reflected on the waves and a path of moonlight. It starts with the moon where it was on screen in Cut, the same size. In Cut too, a moon lowered far enough sets behind the horizon.
+**Wide** is the same shot as Cut with the water whole: the sea to the horizon, the sky and the moon reflected in it, and its path of light. In both, a moon lowered far enough sets behind the horizon.
 
 ![Wide, at night](docs/screenshots/28-wide.jpg)
 
@@ -162,7 +162,7 @@ The controls sit in the lower right: the sky presets and the five views along th
 
 Tap the water to drop a ripple, or drag across it to stir. In every view: drag the moon to spin it, Alt+drag to move it.
 
-Switching view moves the camera rather than cutting. Frank, Below, Above and Wide are one water seen by one camera: every pixel casts a ray from the camera, which under the surface looks up through it (Snell's window and all) and above it meets the sea from above (the sky and the moon reflected, its path of light). So a switch is that camera flying through the same world, straight through the surface when it goes under or comes out, with the moon (one moon, drawn and lit the same way everywhere) moving to its place in the new view; nothing is blended. Above to Wide is a zoom out. Frank and Below glide into each other.
+Switching view moves the camera rather than cutting. All five views are one water seen by one camera: every pixel casts a ray from the camera, which under the surface looks up through it and above it meets the sea from above. So a switch is that camera flying through the same world, straight through the surface when it goes under or comes out, with the moon (one moon, drawn and lit the same way everywhere) moving to its place; nothing is blended. Above to Wide is a zoom out; to or from Cut the cut sweeps through the water, out from the camera to its place, or back. Frank and Below glide into each other.
 
 ### Settings in the address
 
