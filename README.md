@@ -159,7 +159,7 @@ The controls sit in the lower right: the sky presets and the four views along th
 | In front / Behind | Moon in the water, or up in the sky behind the surface | | In front |
 | Bloom on/off | Turns the bloom off entirely | | on |
 | Eye light / Side light | In Cut: the light reaching the eye, or god rays seen from the side | | Eye light |
-| Pause | Freezes the water and the moon | | |
+| ‖ / ▶ (bottom left) | Pauses and resumes: freezes the water and the moon | | playing |
 
 Tap the water to drop a ripple, or drag across it to stir. In every view: drag the moon to spin it, Alt+drag to move it.
 

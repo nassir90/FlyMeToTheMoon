@@ -28,7 +28,15 @@
     font-family: var(--font-label); font-size: 15px; color: var(--ink);
     text-transform: uppercase; letter-spacing: 0.04em; text-shadow: 0 0 6px rgba(0, 0, 0, 0.55);
   }
-  .controls.hidden-ui { display: none; }
+  .controls.hidden-ui, .corner.hidden-ui { display: none; }
+  /* pause / play, bottom left, level with the row of buttons: an icon about the height of the labels' capitals */
+  .corner {
+    position: fixed; bottom: calc(15px + env(safe-area-inset-bottom, 0px)); left: calc(12px + env(safe-area-inset-left, 0px));
+    padding: 8px; background: none; border: 0; color: var(--ink); cursor: pointer;
+    filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.6));
+  }
+  .corner svg { display: block; width: 12px; height: 12px; fill: currentColor; }
+  .corner:hover { opacity: 0.7; }
   /* the parameter lines are hidden until P shows them */
   .controls.params-hidden > label, .controls.params-hidden > .line { display: none; }
   #overlay { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
@@ -87,11 +95,11 @@
     <button id="moonpos" type="button" aria-pressed="false" aria-label="Moon in front of or behind the water"><span class="squeeze">In front</span></button>
     <button id="bloom" type="button" aria-pressed="true"><span class="squeeze">Bloom on</span></button>
     <button id="cutlight" type="button" hidden aria-label="Light in the cut: what the eye receives, or god rays seen from the side"><span class="squeeze">Eye light</span></button>
-    <button id="pause" type="button"><span class="squeeze">Pause</span></button>
   </div>
 </div>
 
 <canvas id="overlay" aria-hidden="true"></canvas>
+<button id="pause" class="corner" type="button" aria-label="Pause"><svg viewBox="0 0 12 12" aria-hidden="true"><g class="i-pause"><rect x="1.5" y="0.5" width="3" height="11"/><rect x="7.5" y="0.5" width="3" height="11"/></g><path class="i-play" d="M2 0.5 L11.5 6 L2 11.5 Z" hidden/></svg></button>
 <div class="err" id="err" hidden>This scene needs WebGL 2, which isn't available in this browser.</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -836,7 +844,11 @@
   });
   let paused = false;
   const pauseBtn = document.getElementById('pause');
-  pauseBtn.addEventListener('click', () => { paused = !paused; pauseBtn.firstElementChild.textContent = paused ? 'Play' : 'Pause'; tightenRows(); });
+  pauseBtn.addEventListener('click', () => {
+    paused = !paused;
+    pauseBtn.querySelector('.i-pause').toggleAttribute('hidden', paused); pauseBtn.querySelector('.i-play').toggleAttribute('hidden', !paused);
+    pauseBtn.setAttribute('aria-label', paused ? 'Play' : 'Pause');
+  });
 
   const rtMoon = new THREE.WebGLRenderTarget(2, 2, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
   uniforms.uMoonTex.value = rtMoon.texture;
@@ -1457,7 +1469,7 @@
   if (q.get('bloom') === '0') bloomBtn.click();
   if (/^(behind|above|sky)$/.test(q.get('moon') || '')) { moonBtn.click(); aboveT = 1; }
   if (q.has('turn')) rotateBy(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(parseFloat(q.get('turn')) || 0));
-  if (q.get('ui') === '0') document.getElementById('controls').classList.add('hidden-ui');
+  if (q.get('ui') === '0') { document.getElementById('controls').classList.add('hidden-ui'); pauseBtn.classList.add('hidden-ui'); }
   if (/^(cut|above|wide)$/.test(q.get('view') || '')) setView(q.get('view'));
   if (q.get('light') === 'side') lightBtn.click();
   updateControls();
@@ -1468,8 +1480,8 @@
     if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
     const controls = document.getElementById('controls');
     const hiding = !controls.classList.contains('hidden-ui');
-    if (hiding && controls.contains(document.activeElement)) canvas.focus();
-    controls.classList.toggle('hidden-ui', hiding);
+    if (hiding && (controls.contains(document.activeElement) || document.activeElement === pauseBtn)) canvas.focus();
+    controls.classList.toggle('hidden-ui', hiding); pauseBtn.classList.toggle('hidden-ui', hiding);
   });
   // P shows and hides the parameter lines (hidden to begin with)
   window.addEventListener('keydown', e => {
