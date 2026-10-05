@@ -899,7 +899,7 @@
   let view = 'frank';
   const under = () => view === 'frank' || view === 'below';
   const views = (() => {
-    const V = { eyeZ: 0, eyeDepth: 3, cutMoon: [3.15, 5.7], side: false, wideMoon: new THREE.Vector3(0.3, 0.2, 1).normalize(), aboveMoon: new THREE.Vector3(0, 0.16, 1).normalize() };
+    const V = { eyeZ: 0, eyeDepth: 3, cutMoon: [3.15, 5.7], side: false, wideMoon: new THREE.Vector3(0.3, 0.2, 1).normalize(), aboveMoon: new THREE.Vector3(1, 0.07, 0).normalize() };   // (Above looks along +x, the moon low ahead)
     const own = {
       uZr: { value: new THREE.Vector2() }, uSunDir: { value: new THREE.Vector3() }, uCamPos: { value: new THREE.Vector3() },
       uEyeP: { value: new THREE.Vector3(0, -3, 0) }, uMoonScr: { value: new THREE.Vector3() }, uSideLight: { value: 0 },
@@ -1126,16 +1126,22 @@
       }`, { transparent: true, depthWrite: false }));
     const aboveSkyScene = new THREE.Scene(); aboveSkyScene.add(dome);
     aboveScene.add(sea);
+    // The views above the water share one camera rig: the same spot (Cut's), looking the same way (+x), with only the
+    // tilt and the zoom differing: Cut tilted down onto the cut, Wide level with the horizon and zoomed out, Above the
+    // same as Wide zoomed in. So moving between them is a tilt and a zoom, never a turn.
+    const LEVEL = 0.10;   // Above's and Wide's tilt below the horizon (radians)
     function placeAbove() {
-      aboveCam.aspect = innerWidth / innerHeight; aboveCam.position.set(0, 2.2, 0); aboveCam.lookAt(0, 2.2 - Math.tan(0.14) * 10, 10);
+      placeCut();
+      const p = cutCam.position;
+      aboveCam.aspect = innerWidth / innerHeight; aboveCam.fov = 30; aboveCam.position.copy(p); aboveCam.lookAt(p.x + 10, p.y - Math.tan(LEVEL) * 10, p.z);
       aboveCam.updateProjectionMatrix(); aboveCam.updateMatrixWorld();
     }
-    // Wide: from about where Cut's camera is, looking the same way, but tilted up enough to see the horizon
+    // Wide: Cut's camera, level with the horizon and zoomed out
     const wideCam = new THREE.PerspectiveCamera(52, 1, 0.1, 2000);
     function placeWide() {
       placeCut();
       const p = cutCam.position;
-      wideCam.aspect = innerWidth / innerHeight; wideCam.position.copy(p); wideCam.lookAt(p.x + 10, p.y - Math.tan(0.16) * 10, p.z);
+      wideCam.aspect = innerWidth / innerHeight; wideCam.position.copy(p); wideCam.lookAt(p.x + 10, p.y - Math.tan(LEVEL) * 10, p.z);
       wideCam.updateProjectionMatrix(); wideCam.updateMatrixWorld();
     }
     // entering Wide: the moon where it was on screen in Cut
@@ -1185,12 +1191,18 @@
     }
     const poseOf = (cam) => ({ pos: cam.position.clone(), quat: cam.quaternion.clone(), fov: cam.fov });
     // just above the water over the eye, looking up the way the camera under the water does (37 degrees)
-    const SURFACE = (() => { const c = new THREE.PerspectiveCamera(50); c.position.set(0, 0.12, 0); c.lookAt(0, 0.12 + Math.sin(0.648), Math.cos(0.648)); return poseOf(c); })();
+    const UNDER_MOON = new THREE.Vector3(0.819, 0.574, 0);   // the moon as the camera under the water has it, turned to the rig's way
+    function surfacePose() {
+      placeCut();
+      const c = new THREE.PerspectiveCamera(50), x = cutCam.position.x;
+      c.position.set(x, 0.12, CZ); c.lookAt(x + Math.cos(0.648), 0.12 + Math.sin(0.648), CZ);
+      return poseOf(c);
+    }
     function endState(v) {
       if (v === 'above') { placeAbove(); return { pose: poseOf(aboveCam), moon: V.aboveMoon.clone(), sin: TRUE_SIN, sea: 'above' }; }
       if (v === 'wide') { placeWide(); return { pose: poseOf(wideCam), moon: V.wideMoon.clone(), sin: cutSin(wideCam), sea: 'wide' }; }
       if (v === 'cut') { placeCut(); return { pose: poseOf(cutCam), moon: new THREE.Vector3(...cutMoonWorld()).sub(cutCam.position).normalize(), sin: cutSin(cutCam), sea: 'wide', cut: true }; }
-      return { pose: SURFACE, moon: DEFAULT_MOON.clone(), sin: TRUE_SIN, sea: 'above', under: true };
+      return { pose: surfacePose(), moon: UNDER_MOON.clone(), sin: TRUE_SIN, sea: 'above', under: true };
     }
     const ease = x => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
     const lerpPose = (p, q, k) => ({ pos: p.pos.clone().lerp(q.pos, k), quat: p.quat.clone().slerp(q.quat, k), fov: p.fov + (q.fov - p.fov) * k });
@@ -1217,33 +1229,32 @@
     V.transitioning = () => !!T;
     V.startTransition = (from, to) => {
       const a = endState(from), b = endState(to);
-      T = { a, b, t: 0, dur: a.under || b.under ? 2.6 : 1.5 };
+      T = { a, b, t0: performance.now(), dur: a.under || b.under ? 2.4 : 1.3 };
     };
     V.renderTransition = (dt, drawUnder) => {
-      T.t = Math.min(T.dur, T.t + dt);
-      const s = T.t / T.dur, { a, b } = T;
+      const s = Math.min(1, (performance.now() - T.t0) / 1000 / T.dur), { a, b } = T;   // by the clock, so slow frames don't drag it out
       if (!a.under && !b.under) {
         const cutW = a.cut && b.cut ? 1 : b.cut ? ease((s - 0.45) / 0.55) : a.cut ? 1 - ease(s / 0.55) : 0;
         drawAbove(a, b, ease(s), cutW);
-      } else if (b.under) {              // down to the water, through it, and on down
-        const SPLIT = 0.55;
-        if (s < SPLIT) { const k = ease(s / SPLIT); drawAbove(a, b, k, a.cut ? 1 - ease(k / 0.6) : 0); }
+      } else if (b.under) {              // down to the water (looking up), through it, and on down
+        const SPLIT = 0.5;
+        if (s < SPLIT) { const k = ease(s / SPLIT); drawAbove(a, b, k, a.cut ? 1 - ease(k / 0.4) : 0); }
         else {
-          const k = (s - SPLIT) / (1 - SPLIT);
-          intoMix(() => renderSea(b.sea, b.pose, b.moon, b.sin));
+          const k = (s - SPLIT) / (1 - SPLIT), seaA = 1 - ease(k / 0.2);   // the water above shows only for the crossing
+          if (seaA > 0.002) intoMix(() => renderSea(b.sea, b.pose, b.moon, b.sin));
           sink(0.04 + 2.96 * ease(k)); moonIn = ease((k - 0.15) / 0.6); drawUnder();
-          overMix(1 - ease(k / 0.3)); ov.style.opacity = 0;
+          overMix(seaA); ov.style.opacity = 0;
         }
-      } else {                           // up from the eye's depth, out through the surface, and on
-        const SPLIT = 0.45;
+      } else {                           // up from the eye's depth, out through the surface, then down to the horizon
+        const SPLIT = 0.4;
         if (s < SPLIT) {
-          const k = s / SPLIT;
-          intoMix(() => renderSea(a.sea, a.pose, a.moon, a.sin));
+          const k = s / SPLIT, seaA = ease((k - 0.8) / 0.2);
+          if (seaA > 0.002) intoMix(() => renderSea(a.sea, a.pose, a.moon, a.sin));
           sink(3 - 2.96 * ease(k)); moonIn = 1 - ease(k / 0.6); drawUnder();
-          overMix(ease((k - 0.7) / 0.3)); ov.style.opacity = 0;
-        } else { const k = ease((s - SPLIT) / (1 - SPLIT)); drawAbove(a, b, k, b.cut ? ease((k - 0.4) / 0.6) : 0); }
+          overMix(seaA); ov.style.opacity = 0;
+        } else { const k = ease((s - SPLIT) / (1 - SPLIT)); drawAbove(a, b, k, b.cut ? ease((k - 0.5) / 0.5) : 0); }
       }
-      if (T.t >= T.dur) { T = null; moonIn = 1; ov.style.opacity = 1; if (b.under) V.leave(); }
+      if (s >= 1) { T = null; moonIn = 1; ov.style.opacity = 1; if (b.under) V.leave(); }
     };
 
     // ---- pointer: drag the moon to spin it, Alt+drag to move it, tap or drag the water to stir; in Cut, drag the eye ----

@@ -123,7 +123,7 @@ Three more views put the moon in the sky above the water, where you can move it.
 
 In all of them, the moon in the sky is the real one, the same 3D moon as in Below, with its colours, shading and spin, and its light (its beam to the eye, its glint, its path on the sea, the god rays) takes its colour under each sky: teal at night, gold at sunset, copper in the eclipse.
 
-**Above** looks across the water from just above it. The moon hangs over the sea with its path of light broken up on the waves, and the sea meets the sky at a soft horizon: a low moon sets into it, cut by the water, with only a sliver showing through where the far water fades out. Alt+drag to move the moon; drag it to spin it.
+**Above** looks out across the water toward the horizon, zoomed in: the same spot and direction as Cut and Wide, so the three differ only in how far the camera tilts and zooms. The moon hangs over the sea with its path of light broken up on the waves, and the sea meets the sky at a soft horizon: a low moon sets into it, cut by the water, with only a sliver showing through where the far water fades out. Alt+drag to move the moon; drag it to spin it.
 
 ![Above, at night](docs/screenshots/26-above.jpg)
 
@@ -162,7 +162,7 @@ The controls sit in the lower right: the sky presets and the five views along th
 
 Tap the water to drop a ripple, or drag across it to stir. In every view: drag the moon to spin it, Alt+drag to move it.
 
-Switching view moves the camera rather than cutting. Between Above and Wide it flies (and zooms) from one to the other, the moon sliding to its new place; to or from Cut it makes the same flight while Cut's lighting comes in or goes; between Cut and Wide, which share a camera, only the lighting changes. To Frank or Below it flies down to just above the water, turns to look up the way the camera under the water does, goes through the surface and sinks to its depth, Snell's window closing from the whole sky to its circle, and the reverse on the way out. Frank and Below glide into each other.
+Switching view moves the camera rather than cutting. The views above the water share one camera, looking the same way from the same spot, so moving between them only tilts and zooms it: Above to Wide zooms out; to or from Cut the camera tilts while the sea covers (or uncovers) the cut; the moon slides to its place in the new view. To Frank or Below the camera goes down to the water, looking up as the camera under it does, through the surface, and sinks to its depth, Snell's window closing from the whole sky to its circle; on the way out it rises through the surface and lowers its gaze to the horizon as it pulls back. Frank and Below glide into each other.
 
 ### Settings in the address
 
