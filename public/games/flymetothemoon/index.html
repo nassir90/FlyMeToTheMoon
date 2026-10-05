@@ -894,10 +894,11 @@
       uZr: { value: new THREE.Vector2() }, uSunDir: { value: new THREE.Vector3() }, uCamPos: { value: new THREE.Vector3() },
       uEyeP: { value: new THREE.Vector3(0, -3, 0) }, uMoonScr: { value: new THREE.Vector3() }, uSideLight: { value: 0 },
       uMoonMap: moonUniforms.uMap, uMoonMul: moonUniforms.uMoonMul, uMoonMix: moonUniforms.uMoonMix,
+      uMoonSin: { value: Math.sqrt(1 - 0.995 * 0.995) },   // the moon's angular radius (sine) in the sea views
     };
     const U = Object.assign({}, uniforms, own);
     const HEAD = WATER + `
-      uniform vec2 uZr, uRes; uniform vec3 uSunDir, uCamPos, uEyeP, uMoonScr, uMoonMul; uniform vec4 uMoonMix; uniform float uSideLight; uniform sampler2D uMoonMap;
+      uniform vec2 uZr, uRes; uniform vec3 uSunDir, uCamPos, uEyeP, uMoonScr, uMoonMul; uniform vec4 uMoonMix; uniform float uSideLight, uMoonSin; uniform sampler2D uMoonMap;
       // the moon's lit face under the current sky: its average albedo through the preset's tint and wash, as the
       // moon's own shader does. Reflections of it are no brighter than this
       vec3 moonFaceCol(){ return mix(vec3(0.435, 0.608, 0.604)*uMoonMul, uMoonMix.rgb, uMoonMix.a); }
@@ -921,7 +922,7 @@
       vec3 skyDome(vec3 d, vec3 m, float face){
         vec3 sky = mix(uSkyLow, uSkyHigh, smoothstep(0.0, 0.7, d.y));
         vec3 rt = normalize(cross(vec3(0.0, 1.0, 0.0), m)), up = cross(m, rt);
-        vec2 q = vec2(dot(d, rt), dot(d, up)) / sqrt(1.0 - MOON_COS*MOON_COS);   // in moon radii
+        vec2 q = vec2(dot(d, rt), dot(d, up)) / uMoonSin;   // in moon radii
         float c = dot(d, m), r = length(q) * step(0.0, c) + (1.0 - step(0.0, c)) * 1e3;
         sky += uHalo*uHaloGain*exp(-max(r - 0.99, 0.0)/0.19) + uGlowA*0.5*exp((c - 1.0)/0.03);
         return mix(sky, moonFace(q), face * smoothstep(1.0, 0.96, r));
@@ -1107,7 +1108,7 @@
         float F = 0.02 + 0.98*pow(1.0 - max(dot(-Vd, N), 0.0), 5.0);
         vec3 body = mix(hazeColour(vec3(0.0, 0.0, 1.0), 0.5), murkColour(), 0.25*uMurk);
         vec3 col = mix(body, skyDome(R, SKY_MOON, 1.0), F);
-        col += moonFaceCol() * F * 1.2 * exp((dot(R, SKY_MOON) - 1.0)/0.0025);   // the moon sparkling on the wave facets: its path of light
+        col += moonFaceCol() * F * 1.2 * exp((dot(R, SKY_MOON) - 1.0)/(0.0025 * uMoonSin*uMoonSin/0.00998));   // (sized to the moon)   // the moon sparkling on the wave facets: its path of light
         col *= 1.0 - clamp(sl.z*0.6, -0.2, 0.3);   // the broad waves' crests and troughs, as in the scene's light bands
         // only right at the horizon does the water fade out (a narrow band, as far off as the water goes), so a low
         // moon is cut by the sea and shows through just a sliver, rather than being painted over
@@ -1144,11 +1145,15 @@
       dome.position.copy(cam.position); sea.position.set(cam.position.x, 0, cam.position.z);
       renderer.setRenderTarget(null); renderer.clear();
       renderer.render(aboveSkyScene, cam);
-      drawMoon(cam, cam.position.clone().addScaledVector(m, 600), 600 * Math.sqrt(1 - 0.995 * 0.995));   // the scene's own size (MOON_COS)
+      // Above: the scene's own size (MOON_COS). Wide: the size it is on screen in Cut
+      const tv = 2 * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
+      const sinR = view === 'wide' ? Math.sin(Math.atan(Math.min(innerWidth, innerHeight) * 0.07 * tv / innerHeight)) : Math.sqrt(1 - 0.995 * 0.995);
+      own.uMoonSin.value = sinR;
+      drawMoon(cam, cam.position.clone().addScaledVector(m, 600), 600 * sinR);
       renderer.render(aboveScene, cam);
       const ms = toScreen(...cam.position.clone().addScaledVector(m, 100).toArray(), cam);
       V.moonScr = ms;
-      V.moonR = Math.tan(Math.acos(0.995)) * innerHeight / (2 * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2)));
+      V.moonR = Math.tan(Math.asin(sinR)) * innerHeight / tv;
       if (ov.width) { og.setTransform(1, 0, 0, 1, 0, 0); og.clearRect(0, 0, ov.width, ov.height); }
     }
 
