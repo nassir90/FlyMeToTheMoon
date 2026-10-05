@@ -137,7 +137,7 @@ In all of them, the moon in the sky is the real one, the same 3D moon as in Belo
 
 ## Controls
 
-The controls sit in the lower right: the sky presets and the four views along the top, then plain white lines that reach left to line up under the first preset, solid up to the current value and blending quickly into a faint line that barely wobbles, then a row of buttons. Drag along a line, or focus it and use the arrow keys. Press **H** to hide or show the controls. Only the controls that do something in the current view are shown: Height, Drift, In front / Behind and Bloom are Below's, Glow shows only with the bloom on, Leak only where the camera under the water is looking (Below, and Cut with the eye's light), and the light button only in Cut.
+The controls sit in the lower right: the sky presets and the four views along the top, then plain white lines that reach left to line up under the first preset, solid up to the current value and blending quickly into a faint line that barely wobbles, then a row of buttons. The lines are hidden to begin with: press **P** to show or hide them. Drag along a line, or focus it and use the arrow keys. Press **H** to hide or show all the controls. Only the controls that do something in the current view are shown: Height, Drift, In front / Behind and Bloom are Below's, Glow shows only with the bloom on, Leak only where the camera under the water is looking (Below, and Cut with the eye's light), and the light button only in Cut.
 
 ![The line controls](docs/screenshots/11-controls.jpg)
 
@@ -183,6 +183,7 @@ Every control can be set from the address, which is how the screenshots here wer
 ?turn=140                         turn the moon 140° to start
 ?view=cut                         the water cut open from the side (?view=above, ?view=wide: across it)
 ?light=side                       in Cut, god rays seen from the side
+?params=1                         start with the parameter lines showing
 ?ui=0                             hide the controls
 ```
 

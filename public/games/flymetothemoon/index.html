@@ -29,6 +29,8 @@
     text-transform: uppercase; letter-spacing: 0.04em; text-shadow: 0 0 6px rgba(0, 0, 0, 0.55);
   }
   .controls.hidden-ui { display: none; }
+  /* the parameter lines are hidden until P shows them */
+  .controls.params-hidden > label, .controls.params-hidden > .line { display: none; }
   #overlay { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
   /* compressed capitals: Times New Roman has no condensed cut, so the words are narrowed */
   .squeeze { display: inline-block; transform: scaleX(0.72); transform-origin: right center; }
@@ -54,9 +56,9 @@
 </style>
 </head>
 <body>
-<canvas id="scene" tabindex="0" aria-label="Animated 3D scene: a full moon seen from under a simulated water surface. Drag the moon to spin it; tap the water to drop a ripple; press H to hide or show the controls. Alt+drag moves the moon. The Cut view shows the water cut open from the side (drag the eye to move it); the Above view looks across the water from above it."></canvas>
+<canvas id="scene" tabindex="0" aria-label="Animated 3D scene: a full moon seen from under a simulated water surface. Drag the moon to spin it; tap the water to drop a ripple; press H to hide or show the controls, P to show or hide the parameter lines. Alt+drag moves the moon. The Cut view shows the water cut open from the side (drag the eye to move it); the Above view looks across the water from above it."></canvas>
 
-<div class="controls" id="controls">
+<div class="controls params-hidden" id="controls">
   <div class="presets" role="group" aria-label="Sky">
     <button type="button" data-sky="0" aria-pressed="false"><span class="squeeze">Day</span></button>
     <button type="button" data-sky="1" aria-pressed="false"><span class="squeeze">Sunset</span></button>
@@ -1469,6 +1471,17 @@
     if (hiding && controls.contains(document.activeElement)) canvas.focus();
     controls.classList.toggle('hidden-ui', hiding);
   });
+  // P shows and hides the parameter lines (hidden to begin with)
+  window.addEventListener('keydown', e => {
+    if (e.key !== 'p' && e.key !== 'P') return;
+    if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+    const controls = document.getElementById('controls');
+    const hiding = !controls.classList.contains('params-hidden');
+    if (hiding && document.activeElement && document.activeElement.closest('.line')) canvas.focus();
+    controls.classList.toggle('params-hidden', hiding);
+    if (!hiding) { controls.style.removeProperty('--line-w'); alignLines(); }
+  });
+  if (q.get('params') === '1') { document.getElementById('controls').classList.remove('params-hidden'); alignLines(); }
 
   frame();
 })();
