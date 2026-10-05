@@ -229,6 +229,7 @@
       uniform vec2 uMoonC;
       uniform sampler2D uMoonTex;
       vec3 gN = vec3(0.0, 1.0, 0.0); float gT = 0.0;   // surface normal and transmission at the last lookUp
+      vec2 gLeakOff = vec2(0.0); float gLeakW = 0.0;   // where (and how much) the moon leaks into the dark water
       uniform vec3 uDeepL, uDeepR, uUpLight, uSkyLow, uSkyHigh, uGlowA, uGlowB, uHalo, uImage, uBloomTint;
       uniform sampler2D uSim; uniform float uTime, uSwell, uChop, uWarp, uChopMode, uLimit, uScale; uniform vec2 uMoon; uniform float uMoonR;
       const float FS = ${CAM.FS}, ALPHA = ${CAM.ALPHA}, DEPTH = ${CAM.DEPTH.toFixed(1)}, TILE = ${CAM.TILE.toFixed(1)};
@@ -379,10 +380,17 @@
         sky += uImage * smoothstep(MOON_COS - 0.0012, MOON_COS + 0.0012, c);
         return sky * T;
       }
+      // how badly the dark water scrambles what leaks through it: amplified slopes plus two
+      // fast jitters, as a screen offset
+      vec2 leakScramble(vec2 xz, vec2 slope){
+        vec2 j1 = vec2(vnoise(xz*3.0 + vec2(uTime*0.4, 0.0)), vnoise(xz*3.0 + vec2(5.2, -uTime*0.35))) - 0.5;
+        vec2 j2 = vec2(vnoise(xz*9.0 + vec2(-uTime*0.7, 1.3)), vnoise(xz*9.0 + vec2(2.7, uTime*0.6))) - 0.5;
+        return (slope*6.0 + j1*0.9 + j2*0.6) * 0.12;
+      }
       vec4 lookUp(vec2 s){
         float u = 0.506 + s.x*0.2375;                      // horizontal position across the view, for the palette
         vec3 d = viewRay(s);
-        gT = 0.0;
+        gT = 0.0; gLeakW = 0.0;
         if (d.y < 0.03) {                                  // looking sideways: just water...
           vec3 w = underwater(d, u);
           if (uLeak > 0.001) {
@@ -391,6 +399,7 @@
             vec2 xzF = d.xz*(DEPTH/0.03) + vec2(0.0, below*40.0);
             vec3 slF = surfaceSlope(xzF, 8.0);
             w += leakLight(normalize(vec3(d.x, 0.06, d.z)), xzF, slF.xy) * 0.4*uLeak * exp(-below*7.0);
+            gLeakOff = leakScramble(xzF, slF.xy) * 1.4; gLeakW = 0.45*uLeak * exp(-below*6.0);
           }
           return vec4(w, 0.0);
         }
@@ -401,7 +410,10 @@
         gN = N;
         vec3 r = refract(d, -N, 1.333);
         vec3 deepR = underwater(reflect(d, -N), u);         // the surface's mirror of the water below
-        if (dot(r, r) < 1e-6) return vec4(deepR + leakLight(d, xz, sl.xy)*0.45*uLeak, 0.0);   // total internal reflection, plus the leak
+        if (dot(r, r) < 1e-6) {                            // total internal reflection, plus the leak
+          gLeakOff = leakScramble(xz, sl.xy); gLeakW = 0.6*uLeak;
+          return vec4(deepR + leakLight(d, xz, sl.xy)*0.45*uLeak, 0.0);
+        }
         float cosT = max(dot(r, N), 0.0);
         float F = 0.0204 + 0.9796*pow(1.0 - cosT, 5.0);    // Fresnel (Schlick, from the air side)
         float T = 1.0 - F;
@@ -434,6 +446,12 @@
         if (vis > 0.001) {
           vec4 m = texture2D(uMoonTex, gl_FragCoord.xy/uRes + vec2(gN.x, gN.z)*0.08);
           col = col*(1.0 - m.a*vis) + m.rgb*vis;
+        }
+        // where the water is dark, the moon still leaks through, faint and scrambled
+        float lw = uAbove * gLeakW;
+        if (lw > 0.001) {
+          vec4 m2 = texture2D(uMoonTex, gl_FragCoord.xy/uRes + gLeakOff);
+          col = col*(1.0 - m2.a*lw) + m2.rgb*lw;
         }
         // halo around wherever the moon is: sharp edge, then a short exponential fall-off
         vec2 sm = (gl_FragCoord.xy - uMoonC) / uMoonRC;

@@ -30,9 +30,9 @@ The dark water below and the surface's mirror of it share one colour field, warm
 
 ![Broad waves alone, rolling across the surface](docs/screenshots/04-broad-waves.jpg)
 
-Some light also leaks into the dark water, badly scrambled. There, each ray is bent again through an exaggerated version of the surface (its real slopes amplified about six times, plus a fast jitter), so the few rays that still get out pick up warped fragments of sky, moon glow and moon. They drift through the dark water below the window's edge and fade out with depth. The **Leak** control sets how much gets through.
+Some light also leaks into the dark water, badly scrambled. There, each ray is bent again through an exaggerated version of the surface (its real slopes amplified about six times, plus a fast jitter), so the few rays that still get out pick up warped fragments of sky, moon glow and moon. They drift through the dark water below the window's edge and fade out with depth. With the moon **Behind** the surface, the same happens to the moon itself: whatever part of it sinks below the waterline still comes through as a faint, shattered ghost, looked up at a badly scrambled position, instead of vanishing. Lower it with **Height** to see more of it. The **Leak** control sets how much gets through.
 
-![Light leaking into the dark water, Leak at its maximum](docs/screenshots/21-leak.jpg)
+![The moon behind the water, lowered, leaking through the dark water as a shattered ghost](docs/screenshots/21-leak.jpg)
 
 With the warp turned off, the ripples settle into a more even, cell-like pattern:
 
@@ -114,7 +114,7 @@ The controls sit in the lower right: the sky presets along the top, then plain w
 | Speed | How fast all the water moves (also slows the simulation) | 0.1 – 1.5 | 0.6 |
 | Height | Raises or lowers the moon, in the water or in the sky | −1 – 1 | 0 |
 | Halo | Strength of the glow around the big moon (on top of what the sky sets) | 0 – 2 | 1 |
-| Leak | How much scrambled light leaks into the dark water | 0 – 1 | 0.5 |
+| Leak | How much scrambled light, and with the moon Behind, the moon itself, leaks into the dark water | 0 – 1 | 0.5 |
 | Glow | Strength of the bloom | 0 – 2 | 0.6 |
 | In front / Behind | Moon in the water, or up in the sky behind the surface | | In front |
 | Bloom on/off | Turns the bloom off entirely | | on |
