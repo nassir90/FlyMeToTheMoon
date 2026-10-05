@@ -862,7 +862,7 @@
   const DEFAULT_MOON = new THREE.Vector3(0, 0.574, 0.819);
   let view = 'below';
   const views = (() => {
-    const V = { eyeZ: 0, eyeDepth: 3, cutA: Math.atan2(0.574, 0.819), cutR: 5.5, side: false, aboveMoon: new THREE.Vector3(0, 0.16, 1).normalize() };
+    const V = { eyeZ: 0, eyeDepth: 3, cutMoon: [3.15, 5.7], side: false, aboveMoon: new THREE.Vector3(0, 0.16, 1).normalize() };
     const own = {
       uZr: { value: new THREE.Vector2() }, uSunDir: { value: new THREE.Vector3() }, uCamPos: { value: new THREE.Vector3() },
       uEyeP: { value: new THREE.Vector3(0, -3, 0) }, uMoonScr: { value: new THREE.Vector3() }, uSideLight: { value: 0 },
@@ -944,7 +944,10 @@
       v3.set(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1, 0.5).unproject(cutCam).sub(cutCam.position);
       const t = -cutCam.position.x / v3.x; return [cutCam.position.y + v3.y * t, cutCam.position.z + v3.z * t];
     };
-    const cutMoonWorld = () => [0, Math.sin(V.cutA) * V.cutR, CZ + Math.cos(V.cutA) * V.cutR];
+    // the moon in Cut sits where it was put, on the cut's plane, above the water; its light comes from there as seen
+    // from the surface above the eye, so the eye's beam always points at it
+    const cutMoonWorld = () => [0, V.cutMoon[0], V.cutMoon[1]];
+    const cutMoonDir = () => { const y = V.cutMoon[0], z = V.cutMoon[1] - V.eyeZ, l = Math.hypot(y, z); return [0, y / l, z / l]; };
     const cutScene = new THREE.Scene();
     const NF = 1200, NZ = 300, NX = 15, MID = -3.5, DEEP = -80;
     const geom = (n) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3)); return g; };
@@ -1029,7 +1032,7 @@
     function renderCut() {
       placeCut(); probe();
       uniforms.uEyeDepth.value = V.eyeDepth; uniforms.uEyeOff.value.set(0, V.eyeZ);
-      uniforms.uSkyMoon.value.set(0, Math.sin(V.cutA), Math.cos(V.cutA));
+      uniforms.uSkyMoon.value.set(...cutMoonDir());
       own.uEyeP.value.set(0, -V.eyeDepth, V.eyeZ); own.uCamPos.value.copy(cutCam.position); own.uSideLight.value = V.side ? 1 : 0;
       const M = cutMoonWorld(); own.uSunDir.value.set(...M).sub(cutCam.position).normalize();
       const ms = toScreen(...M, cutCam), pr = renderer.getPixelRatio();
@@ -1106,16 +1109,21 @@
       if (view === 'cut') {
         const [y, z] = onCut(e.clientX, e.clientY);
         if (drag === 'eye') { V.eyeDepth = Math.max(0.5, Math.min(7, -y)); V.eyeZ = Math.max(zr[0] + 2, Math.min(zr[1] - 2, z)); }
-        else { V.cutA = Math.max(0.06, Math.min(Math.PI - 0.06, Math.atan2(Math.max(y, 0.3), z - CZ))); V.cutR = Math.max(4, Math.min(16, Math.hypot(y, z - CZ))); }
+        else { V.cutMoon = [Math.max(0.6, y + grab[0]), z + grab[1]]; }
       } else {
         v3.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1, 0.5).unproject(aboveCam).sub(aboveCam.position).normalize();
         const el = Math.max(0.02, Math.min(1.2, Math.asin(v3.y))), az = Math.atan2(v3.x, v3.z);
         V.aboveMoon.set(Math.cos(el) * Math.sin(az), Math.sin(el), Math.cos(el) * Math.cos(az));
       }
     }
+    let grab = [0, 0];
     canvas.addEventListener('pointerdown', e => {
       if (view === 'below') return;
       drag = view === 'cut' && nearEye(e) ? 'eye' : 'moon';
+      if (view === 'cut' && drag === 'moon') {
+        const [y, z] = onCut(e.clientX, e.clientY);
+        grab = nearMoon(e) ? [V.cutMoon[0] - y, V.cutMoon[1] - z] : [0, 0];
+      }
       canvas.setPointerCapture(e.pointerId); canvas.classList.add('grabbing'); apply(e);
     });
     canvas.addEventListener('pointermove', e => {
