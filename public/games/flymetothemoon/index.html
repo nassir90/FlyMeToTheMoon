@@ -66,6 +66,7 @@
   <label for="speed"><span class="squeeze">Speed</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="speed" type="range" min="0.1" max="1.5" step="0.01" value="0.6"></div>
   <label for="height"><span class="squeeze">Height</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="height" type="range" min="-1" max="1" step="0.01" value="0"></div>
   <label for="halo"><span class="squeeze">Halo</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="halo" type="range" min="0" max="2" step="0.01" value="1"></div>
+  <label for="leak"><span class="squeeze">Leak</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="leak" type="range" min="0" max="1" step="0.01" value="0.5"></div>
   <label for="glow"><span class="squeeze">Glow</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="glow" type="range" min="0" max="2" step="0.01" value="0.6"></div>
   <div class="buttons">
     <button id="moonpos" type="button" aria-pressed="false" aria-label="Moon in front of or behind the water"><span class="squeeze">In front</span></button>
@@ -110,7 +111,8 @@
     uMoonR: { value: 100 },                      // the moon's radius there, device pixels (the scene's unit)
     uMoonC: { value: new THREE.Vector2(0, 0) },  // where the moon actually is right now
     uMoonRC: { value: 100 },                     // and its actual radius
-    uAbove: { value: 0 },                        // 0: moon in the water, 1: moon in the sky above it
+    uAbove: { value: 0 },
+    uLeak: { value: 0.5 },                         // light leaking, scrambled, into the dark water                        // 0: moon in the water, 1: moon in the sky above it
     uMoonTex: { value: null },                   // the moon rendered off-screen, for viewing through the surface
     uSim: { value: null },                       // simulated height field
     uSwell: { value: 0.8 },
@@ -223,7 +225,7 @@
   // =====================================================================================
   const CAM = { FS: 0.25, ALPHA: 0.648, DEPTH: 3.0, TILE: 20.0 };
   const WATER = `
-      uniform float uHaloGain, uMoonRC, uAbove;
+      uniform float uHaloGain, uMoonRC, uAbove, uLeak;
       uniform vec2 uMoonC;
       uniform sampler2D uMoonTex;
       vec3 gN = vec3(0.0, 1.0, 0.0); float gT = 0.0;   // surface normal and transmission at the last lookUp
@@ -361,11 +363,37 @@
         float n = vnoise(q + vec2(uTime*0.03, -uTime*0.02)) + 0.5*vnoise(q*2.1 - vec2(uTime*0.02, 0.0));
         return c + vec3(0.006, 0.012, 0.018) * (n - 0.75);
       }
+      // Light leaking into the dark water: the ray is bent again through an exaggerated surface
+      // (real slopes amplified and jittered fast), so the few rays that still get out pick up
+      // badly scrambled fragments of sky, moon glow and moon.
+      vec3 leakLight(vec3 d, vec2 xz, vec2 slope){
+        vec2 jit = vec2(vnoise(xz*3.0 + vec2(uTime*0.4, 0.0)), vnoise(xz*3.0 + vec2(5.2, -uTime*0.35))) - 0.5;
+        vec3 N = normalize(vec3(-(slope.x*6.0 + jit.x*0.9), 1.0, -(slope.y*6.0 + jit.y*0.9)));
+        vec3 r = refract(d, -N, 1.333);
+        if (dot(r, r) < 1e-6) return vec3(0.0);
+        float cosT = max(dot(r, N), 0.0);
+        float T = 1.0 - (0.0204 + 0.9796*pow(1.0 - cosT, 5.0));
+        vec3 sky = mix(uSkyLow, uSkyHigh, smoothstep(0.05, 0.9, clamp(r.y, 0.0, 1.0)));
+        float c = dot(r, SKY_MOON);
+        sky += uGlowA*exp((c - 1.0)/0.03) + uGlowB*exp((c - 1.0)/0.006);
+        sky += uImage * smoothstep(MOON_COS - 0.0012, MOON_COS + 0.0012, c);
+        return sky * T;
+      }
       vec4 lookUp(vec2 s){
         float u = 0.506 + s.x*0.2375;                      // horizontal position across the view, for the palette
         vec3 d = viewRay(s);
         gT = 0.0;
-        if (d.y < 0.03) return vec4(underwater(d, u), 0.0); // looking sideways: just water
+        if (d.y < 0.03) {                                  // looking sideways: just water...
+          vec3 w = underwater(d, u);
+          if (uLeak > 0.001) {
+            // ...with the leak carrying on faintly into the depths, as if seen far off and fading
+            float below = 0.03 - d.y;
+            vec2 xzF = d.xz*(DEPTH/0.03) + vec2(0.0, below*40.0);
+            vec3 slF = surfaceSlope(xzF, 8.0);
+            w += leakLight(normalize(vec3(d.x, 0.06, d.z)), xzF, slF.xy) * 0.4*uLeak * exp(-below*7.0);
+          }
+          return vec4(w, 0.0);
+        }
         float dist = DEPTH / d.y;
         vec2 xz = d.xz * dist;
         vec3 sl = surfaceSlope(xz, dist);
@@ -373,7 +401,7 @@
         gN = N;
         vec3 r = refract(d, -N, 1.333);
         vec3 deepR = underwater(reflect(d, -N), u);         // the surface's mirror of the water below
-        if (dot(r, r) < 1e-6) return vec4(deepR, 0.0);     // total internal reflection
+        if (dot(r, r) < 1e-6) return vec4(deepR + leakLight(d, xz, sl.xy)*0.45*uLeak, 0.0);   // total internal reflection, plus the leak
         float cosT = max(dot(r, N), 0.0);
         float F = 0.0204 + 0.9796*pow(1.0 - cosT, 5.0);    // Fresnel (Schlick, from the air side)
         float T = 1.0 - F;
@@ -680,6 +708,7 @@
   document.getElementById('swell').addEventListener('input', e => uniforms.uSwell.value = parseFloat(e.target.value));
   document.getElementById('speed').addEventListener('input', e => waveSpeed = parseFloat(e.target.value));
   document.getElementById('height').addEventListener('input', e => moonHeight = parseFloat(e.target.value));
+  document.getElementById('leak').addEventListener('input', e => uniforms.uLeak.value = parseFloat(e.target.value));
   document.getElementById('halo').addEventListener('input', e => uniforms.uHaloGain.value = parseFloat(e.target.value));
   document.getElementById('glow').addEventListener('input', e => glowU.value = parseFloat(e.target.value));
   let bloomOn = true;
@@ -917,7 +946,7 @@
 
   // Settings from the address, e.g. ?sky=sunset&waves=1.2&swell=1.2&speed=0.3&bloom=0&turn=90&ui=0
   const q = new URLSearchParams(location.search);
-  for (const [key, id] of [['wind','wind'], ['warp','warp'], ['waves','chop'], ['swell','swell'], ['speed','speed'], ['height','height'], ['halo','halo'], ['glow','glow']]) {
+  for (const [key, id] of [['wind','wind'], ['warp','warp'], ['waves','chop'], ['swell','swell'], ['speed','speed'], ['height','height'], ['halo','halo'], ['leak','leak'], ['glow','glow']]) {
     if (q.has(key)) { const el = document.getElementById(id); el.value = q.get(key); el.dispatchEvent(new Event('input')); }
   }
   if (q.has('sky')) {
