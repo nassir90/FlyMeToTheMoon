@@ -24,9 +24,19 @@ The surface is a real simulation, not a painted texture:
 
 ### Looking up through it
 
-Each pixel casts a ray up from an underwater camera, three units deep and tilted 37° up. The ray is bent out through the moving surface with Snell's law (n = 1.333) and weighted by Fresnel reflection. Past the critical angle it reflects back down into the dark water instead. So the edge of the bright window ripples and breaks up, the window dims toward its edge, and the moon's image breaks apart and glints, all from the optics rather than drawn shapes.
+Each pixel casts a ray up from an underwater camera, three units deep and tilted 37° up. The ray is bent out through the moving surface with Snell's law (n = 1.333) and weighted by Fresnel reflection. Past the critical angle (48.6° from straight up) it reflects back down into the dark water instead. So the edge of the bright window ripples and breaks up, the window dims toward its edge, and the moon's image breaks apart and glints, all from the optics rather than drawn shapes.
 
-The dark water below and the surface's mirror of it share one colour field, warm brown-black on the left and cooler on the right, with a faint, slow drift of light, so the whole frame reads as water.
+Three things keep that from looking like a bright hole cut in a flat dark ceiling:
+
+- **Ripples too small to simulate.** Each pixel covers many tiny ripples, each tilted a little differently, so the light that gets out is averaged over a spread of angles, and the spread widens with distance. The window's edge, and the bright patches that break off it as waves tilt the surface, shade off smoothly instead of switching on and off.
+- **Distance.** Light fades toward the water's own colour the further it travels through it. The surface near overhead stays clear, and toward the horizon it recedes into haze until it meets the open water, so it reads as a sheet stretching away rather than a flat wall.
+- **Murk.** Particles in the water scatter light from the window toward you. The glow is strongest right at the window's edge and fades out into the dark water, with a lighter veil over the window itself.
+
+The dark water below and the surface's mirror of it share one colour field, warm brown-black on the left and cooler on the right, with a faint, slow drift of light, so the whole frame reads as water. That light depends on direction, nearly black straight down and brighter toward the surface, so as the waves tilt the mirror it shows their shape.
+
+![Murk at its maximum](docs/screenshots/22-murk.jpg)
+
+![No murk: clear water](docs/screenshots/23-clear.jpg)
 
 ![Broad waves alone, rolling across the surface](docs/screenshots/04-broad-waves.jpg)
 
@@ -115,6 +125,7 @@ The controls sit in the lower right: the sky presets along the top, then plain w
 | Height | Raises or lowers the moon, in the water or in the sky | −1 – 1 | 0 |
 | Halo | Strength of the glow around the big moon (on top of what the sky sets) | 0 – 2 | 1 |
 | Leak | How much scrambled light, and with the moon Behind, the moon itself, leaks into the dark water | 0 – 1 | 0.5 |
+| Murk | How cloudy the water is: the glow around the window's edge and how quickly the distance fades | 0 – 1.5 | 0.7 |
 | Glow | Strength of the bloom | 0 – 2 | 0.6 |
 | In front / Behind | Moon in the water, or up in the sky behind the surface | | In front |
 | Bloom on/off | Turns the bloom off entirely | | on |
@@ -136,6 +147,7 @@ Every control can be set from the address, which is how the screenshots here wer
 ?height=1                         raise the moon (−1 lowers it)
 ?halo=0                           no glow around the moon
 ?leak=0                           no light leaking into the dark water
+?murk=0                           clear water (1.5 is very cloudy)
 ?bloom=0                          bloom off
 ?turn=140                         turn the moon 140° to start
 ?ui=0                             hide the controls

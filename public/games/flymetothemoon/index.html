@@ -67,6 +67,7 @@
   <label for="height"><span class="squeeze">Height</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="height" type="range" min="-1" max="1" step="0.01" value="0"></div>
   <label for="halo"><span class="squeeze">Halo</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="halo" type="range" min="0" max="2" step="0.01" value="1"></div>
   <label for="leak"><span class="squeeze">Leak</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="leak" type="range" min="0" max="1" step="0.01" value="0.5"></div>
+  <label for="murk"><span class="squeeze">Murk</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="murk" type="range" min="0" max="1.5" step="0.01" value="0.7"></div>
   <label for="glow"><span class="squeeze">Glow</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="glow" type="range" min="0" max="2" step="0.01" value="0.6"></div>
   <div class="buttons">
     <button id="moonpos" type="button" aria-pressed="false" aria-label="Moon in front of or behind the water"><span class="squeeze">In front</span></button>
@@ -111,8 +112,9 @@
     uMoonR: { value: 100 },                      // the moon's radius there, device pixels (the scene's unit)
     uMoonC: { value: new THREE.Vector2(0, 0) },  // where the moon actually is right now
     uMoonRC: { value: 100 },                     // and its actual radius
-    uAbove: { value: 0 },
-    uLeak: { value: 0.5 },                         // light leaking, scrambled, into the dark water                        // 0: moon in the water, 1: moon in the sky above it
+    uAbove: { value: 0 },                        // 0: moon in the water, 1: moon in the sky above it
+    uLeak: { value: 0.5 },                       // light leaking, scrambled, into the dark water
+    uMurk: { value: 0.7 },                       // how cloudy the water is: light scattered out of the bright window
     uMoonTex: { value: null },                   // the moon rendered off-screen, for viewing through the surface
     uSim: { value: null },                       // simulated height field
     uSwell: { value: 0.8 },
@@ -225,7 +227,7 @@
   // =====================================================================================
   const CAM = { FS: 0.25, ALPHA: 0.648, DEPTH: 3.0, TILE: 20.0 };
   const WATER = `
-      uniform float uHaloGain, uMoonRC, uAbove, uLeak;
+      uniform float uHaloGain, uMoonRC, uAbove, uLeak, uMurk;
       uniform vec2 uMoonC;
       uniform sampler2D uMoonTex;
       vec3 gN = vec3(0.0, 1.0, 0.0); float gT = 0.0;   // surface normal and transmission at the last lookUp
@@ -358,11 +360,22 @@
       // u: horizontal position across the view (0 left, 1 right), for the palette (#191313 left -> #1a1922 right).
       vec3 underwater(vec3 dir, float u){
         vec3 c = mix(uDeepL, uDeepR, smoothstep(0.4, 0.95, u));
-        c += uUpLight * smoothstep(-0.25, 0.6, dir.y);                    // light from above, scattered
+        // the light in the water depends strongly on direction: nearly black straight down, brighter
+        // toward horizontal, brightest looking up. The surface's mirror samples this, so as the
+        // waves tilt it the dark region shimmers with their shape.
+        c *= mix(0.55, 1.1, smoothstep(-0.85, 0.15, dir.y));
+        c += uUpLight * (0.35*smoothstep(-0.7, 0.05, dir.y) + 0.9*smoothstep(0.0, 0.7, dir.y));
         // faint, slow drifts of light in the water, barely moving
         vec2 q = vec2(dir.x/max(dir.z, 0.2)*2.5, dir.y*3.0);
         float n = vnoise(q + vec2(uTime*0.03, -uTime*0.02)) + 0.5*vnoise(q*2.1 - vec2(uTime*0.02, 0.0));
         return c + vec3(0.006, 0.012, 0.018) * (n - 0.75);
+      }
+      // Fraction of light that gets out of the water for a ray meeting the surface at incidence cosine
+      // ci: none past the critical angle, then Fresnel (Schlick, from the air side).
+      float transmit(float ci){
+        float sa2 = 1.777*(1.0 - ci*ci);
+        if (ci <= 0.0 || sa2 >= 1.0) return 0.0;
+        return 1.0 - (0.0204 + 0.9796*pow(1.0 - sqrt(1.0 - sa2), 5.0));
       }
       // Light leaking into the dark water: the ray is bent again through an exaggerated surface
       // (real slopes amplified and jittered fast), so the few rays that still get out pick up
@@ -370,10 +383,12 @@
       vec3 leakLight(vec3 d, vec2 xz, vec2 slope){
         vec2 jit = vec2(vnoise(xz*3.0 + vec2(uTime*0.4, 0.0)), vnoise(xz*3.0 + vec2(5.2, -uTime*0.35))) - 0.5;
         vec3 N = normalize(vec3(-(slope.x*6.0 + jit.x*0.9), 1.0, -(slope.y*6.0 + jit.y*0.9)));
+        // averaged over a wide spread of angles, so the fragments shade in and out rather than cut
+        float ci = dot(d, N), sg = 0.07;
+        float T = (transmit(ci - sg) + 2.0*transmit(ci) + transmit(ci + sg)) * 0.25;
+        if (T < 1e-4) return vec3(0.0);
         vec3 r = refract(d, -N, 1.333);
-        if (dot(r, r) < 1e-6) return vec3(0.0);
-        float cosT = max(dot(r, N), 0.0);
-        float T = 1.0 - (0.0204 + 0.9796*pow(1.0 - cosT, 5.0));
+        if (dot(r, r) < 1e-6) r = normalize(vec3(d.x, 0.02, d.z));   // grazing: just above the horizon
         vec3 sky = mix(uSkyLow, uSkyHigh, smoothstep(0.05, 0.9, clamp(r.y, 0.0, 1.0)));
         float c = dot(r, SKY_MOON);
         sky += uGlowA*exp((c - 1.0)/0.03) + uGlowB*exp((c - 1.0)/0.006);
@@ -387,12 +402,27 @@
         vec2 j2 = vec2(vnoise(xz*9.0 + vec2(-uTime*0.7, 1.3)), vnoise(xz*9.0 + vec2(2.7, uTime*0.6))) - 0.5;
         return (slope*6.0 + j1*0.9 + j2*0.6) * 0.12;
       }
+      // Murk: particles in the water scatter light out of the bright window toward us. It peaks right
+      // at the window's edge (where the ray meets the surface at the critical angle, cos = 0.661),
+      // fades gently outward into the dark water and quickly inward, so the edge softens into a glow
+      // instead of a cut-out; a lighter haze also veils the window itself. ci is the cosine of the
+      // ray's angle to the (wave-tilted) surface normal, so the glow follows the wavy edge.
+      vec3 murkColour(){ return mix(uSkyLow, uSkyHigh, 0.35) + uGlowA*0.35; }
+      float murkAmount(float ci){
+        if (ci < 0.661) return uMurk * 0.55 * exp(-(0.661 - ci)/0.18);          // outside: fading into the dark
+        return uMurk * max(0.55 * exp(-(ci - 0.661)/0.05), 0.18);               // inside: quickly down to a light veil
+      }
+      // Distance: everything seen through the water fades toward the water's own colour the further
+      // the light has to travel, so the surface recedes into haze toward the horizon instead of
+      // standing like a flat ceiling. The first stretch above the camera stays clear.
+      float hazeAmount(float dist){ return 1.0 - exp(-max(dist - 2.5, 0.0) * (0.03 + 0.07*uMurk)); }
+      vec3 hazeColour(vec3 d, float u){ return underwater(normalize(vec3(d.x, 0.03, d.z)), u) + murkColour()*0.12*uMurk; }
       vec4 lookUp(vec2 s){
         float u = 0.506 + s.x*0.2375;                      // horizontal position across the view, for the palette
         vec3 d = viewRay(s);
         gT = 0.0; gLeakW = 0.0;
         if (d.y < 0.03) {                                  // looking sideways: just water...
-          vec3 w = underwater(d, u);
+          vec3 w = hazeColour(d, u);                      // (the surface this way is so far off it's lost in the haze)
           if (uLeak > 0.001) {
             // ...with the leak carrying on faintly into the depths, as if seen far off and fading
             float below = 0.03 - d.y;
@@ -408,26 +438,37 @@
         vec3 sl = surfaceSlope(xz, dist);
         vec3 N = normalize(vec3(-sl.x, 1.0, -sl.y));
         gN = N;
-        vec3 r = refract(d, -N, 1.333);
         vec3 deepR = underwater(reflect(d, -N), u);         // the surface's mirror of the water below
-        if (dot(r, r) < 1e-6) {                            // total internal reflection, plus the leak
-          gLeakOff = leakScramble(xz, sl.xy); gLeakW = 0.6*uLeak;
-          return vec4(deepR + leakLight(d, xz, sl.xy)*0.45*uLeak, 0.0);
+        // How much light gets out through the surface. A pixel covers many ripples too small for the
+        // simulation, each tilted a little differently, so average the transmission over a spread of
+        // incidence angles that widens with distance. The window's edge and the bright patches that
+        // break off it then shade off smoothly instead of switching on and off like a cut-out.
+        float ci = dot(d, N);
+        float sg = 0.03 + 0.012*dist;
+        float Te = (transmit(ci - 2.0*sg) + 4.0*transmit(ci - sg) + 6.0*transmit(ci)
+                  + 4.0*transmit(ci + sg) + transmit(ci + 2.0*sg)) / 16.0;
+        vec3 r = refract(d, -N, 1.333);
+        vec3 sky = uSkyLow;                                // light from just above the horizon, at grazing exit
+        float disc = 0.0;
+        if (dot(r, r) > 1e-6) {
+          // night sky through the surface: #122238 near the horizon to #295075 high up
+          float el = clamp(r.y, 0.0, 1.0);
+          sky = mix(uSkyLow, uSkyHigh, smoothstep(0.05, 0.9, el));
+          float c = dot(r, SKY_MOON);
+          sky += uGlowA * exp((c - 1.0)/0.03) + uGlowB * exp((c - 1.0)/0.006);
+          disc = smoothstep(MOON_COS - 0.0012, MOON_COS + 0.0012, c);
         }
-        float cosT = max(dot(r, N), 0.0);
-        float F = 0.0204 + 0.9796*pow(1.0 - cosT, 5.0);    // Fresnel (Schlick, from the air side)
-        float T = 1.0 - F;
-        gT = T;
-        // night sky through the surface: #122238 near the horizon to #295075 high up
-        float el = clamp(r.y, 0.0, 1.0);
-        vec3 sky = mix(uSkyLow, uSkyHigh, smoothstep(0.05, 0.9, el));
-        float c = dot(r, SKY_MOON);
-        sky += uGlowA * exp((c - 1.0)/0.03) + uGlowB * exp((c - 1.0)/0.006);
-        float disc = smoothstep(MOON_COS - 0.0012, MOON_COS + 0.0012, c);
-        vec3 col = T*sky + F*deepR;
+        gT = Te;
+        float dark = (1.0 - Te)*(1.0 - Te);                // where it's mostly mirror: the leak
+        gLeakOff = leakScramble(xz, sl.xy); gLeakW = 0.6*uLeak*dark;
+        vec3 col = Te*sky + (1.0 - Te)*deepR + leakLight(d, xz, sl.xy)*0.45*uLeak*dark;
         // crests and troughs of the broad waves focus and spread the light: long bands that move with them
         col *= 1.0 - clamp(sl.z*0.9, -0.3, 0.4);
-        return vec4(col, T*disc);
+        col = mix(col, murkColour(), murkAmount(ci));      // the murk: fills the edge, lightly veils the window
+        float hz = hazeAmount(dist);
+        col = mix(col, hazeColour(d, u), hz);
+        gT *= 1.0 - hz;
+        return vec4(col, Te*disc*(1.0 - hz));
       }
   `;
 
@@ -726,6 +767,7 @@
   document.getElementById('swell').addEventListener('input', e => uniforms.uSwell.value = parseFloat(e.target.value));
   document.getElementById('speed').addEventListener('input', e => waveSpeed = parseFloat(e.target.value));
   document.getElementById('height').addEventListener('input', e => moonHeight = parseFloat(e.target.value));
+  document.getElementById('murk').addEventListener('input', e => uniforms.uMurk.value = parseFloat(e.target.value));
   document.getElementById('leak').addEventListener('input', e => uniforms.uLeak.value = parseFloat(e.target.value));
   document.getElementById('halo').addEventListener('input', e => uniforms.uHaloGain.value = parseFloat(e.target.value));
   document.getElementById('glow').addEventListener('input', e => glowU.value = parseFloat(e.target.value));
@@ -964,7 +1006,7 @@
 
   // Settings from the address, e.g. ?sky=sunset&waves=1.2&swell=1.2&speed=0.3&bloom=0&turn=90&ui=0
   const q = new URLSearchParams(location.search);
-  for (const [key, id] of [['wind','wind'], ['warp','warp'], ['waves','chop'], ['swell','swell'], ['speed','speed'], ['height','height'], ['halo','halo'], ['leak','leak'], ['glow','glow']]) {
+  for (const [key, id] of [['wind','wind'], ['warp','warp'], ['waves','chop'], ['swell','swell'], ['speed','speed'], ['height','height'], ['halo','halo'], ['leak','leak'], ['murk','murk'], ['glow','glow']]) {
     if (q.has(key)) { const el = document.getElementById(id); el.value = q.get(key); el.dispatchEvent(new Event('input')); }
   }
   if (q.has('sky')) {
