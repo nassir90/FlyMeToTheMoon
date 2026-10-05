@@ -144,7 +144,7 @@ The controls sit in the lower right: the sky presets and the five views along th
 | Control | What it does | Range | Default |
 |---|---|---|---|
 | Day · Sunset · Night · Midnight · Eclipse | Sky presets; pressing one fades the scene to it | | Night |
-| Frank · Below · Cut · Above · Wide | The view: from under the water with the moon in front of it (Frank) or behind it (Below), the water cut open from the side, across it from just above, or across it from where Cut looks | | Frank |
+| Frank · Below · Cut · Above · Wide | The view (Frank and Below glide into each other; any other switch dissolves over 0.8 s): from under the water with the moon in front of it (Frank) or behind it (Below), the water cut open from the side, across it from just above, or across it from where Cut looks | | Frank |
 | Wind | Strength of the simulated wind ripples | 0 – 1.2 | 0.45 |
 | Warp | How much the height grid is bent | 0 – 2 | 1 |
 | Waves | Strength of the broad wind sea | 0 – 1.2 | 0.9 |

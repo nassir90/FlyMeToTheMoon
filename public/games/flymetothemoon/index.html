@@ -1255,7 +1255,46 @@
   }
   window.addEventListener('resize', () => requestAnimationFrame(alignPause));
   if (document.fonts) document.fonts.ready.then(alignPause);
-  function setView(v) {
+  // Switching view: Frank and Below share one scene, so the moon just glides between them. Any other switch
+  // dissolves: the frame where it happens keeps the old view's last picture, and from the next frame the new view
+  // runs live under it while it fades out (and drifts slightly forward) over 0.8 s.
+  let pendingView = null, fade = 1, snapTex = null;
+  const fadeMat = new THREE.ShaderMaterial({
+    uniforms: { tSnap: { value: null }, uK: { value: 1 } }, transparent: true, depthTest: false, depthWrite: false, vertexShader: flatVS,
+    fragmentShader: `uniform sampler2D tSnap; uniform float uK; varying vec2 vUv;
+      void main(){ vec2 uv = 0.5 + (vUv - 0.5) / (1.0 + 0.04*uK); gl_FragColor = vec4(texture2D(tSnap, uv).rgb, 1.0 - uK); }`,
+  });
+  const fadeScene = new THREE.Scene(); fadeScene.add(quad(fadeMat));
+  const zero = new THREE.Vector2(), bufSize = new THREE.Vector2();
+  function setView(v, instant) {
+    if (v === view && !pendingView) return;
+    const glide = under() && (v === 'frank' || v === 'below');
+    if (instant || glide || reduceMotion) { pendingView = null; applyView(v); }
+    else pendingView = v;   // taken up at the end of the next frame, once the old view has been drawn once more
+  }
+  // called at the end of every frame: take a pending switch, or carry on a dissolve
+  function stepTransition(dt) {
+    if (pendingView) {
+      renderer.getDrawingBufferSize(bufSize);
+      if (!snapTex || snapTex.image.width !== bufSize.x || snapTex.image.height !== bufSize.y) {
+        if (snapTex) snapTex.dispose();
+        snapTex = new THREE.DataTexture(new Uint8Array(bufSize.x * bufSize.y * 3), bufSize.x, bufSize.y, THREE.RGBFormat);
+        snapTex.minFilter = snapTex.magFilter = THREE.LinearFilter;
+        fadeMat.uniforms.tSnap.value = snapTex;
+      }
+      renderer.setRenderTarget(null);
+      renderer.copyFramebufferToTexture(zero, snapTex);
+      applyView(pendingView); pendingView = null; fade = 0;
+      return;
+    }
+    if (fade >= 1) return;
+    fade = Math.min(1, fade + dt / 0.8);
+    const k = fade * fade * (3 - 2 * fade);
+    fadeMat.uniforms.uK.value = k;
+    renderer.setRenderTarget(null); renderer.render(fadeScene, flatCam);
+    document.getElementById('overlay').style.opacity = view === 'cut' ? k : 1;
+  }
+  function applyView(v) {
     view = v;
     viewBtns.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === v)));
     canvas.classList.toggle('view-cut', v === 'cut'); canvas.classList.toggle('view-sea', v === 'above' || v === 'wide'); canvas.classList.remove('over-moon', 'grabbing');
@@ -1332,6 +1371,7 @@
     if (bloomOn) renderer.render(bloomScene, flatCam);
     renderer.render(overlayScene, flatCam);
     }
+    stepTransition(dt);
     stepSky(dt);
     drawSliders(reduceMotion ? 0 : performance.now()/1000);
     requestAnimationFrame(frame);
@@ -1475,10 +1515,10 @@
     goToSky(named >= 0 ? named : Math.min(SKIES.length - 1, Math.max(0, parseFloat(v) || 0)), true);
   }
   if (q.get('bloom') === '0') bloomBtn.click();
-  if (/^(behind|above|sky)$/.test(q.get('moon') || '')) { setView('below'); aboveT = 1; }
+  if (/^(behind|above|sky)$/.test(q.get('moon') || '')) { setView('below', true); aboveT = 1; }
   if (q.has('turn')) rotateBy(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(parseFloat(q.get('turn')) || 0));
   if (q.get('ui') === '0') { document.getElementById('controls').classList.add('hidden-ui'); pauseBtn.classList.add('hidden-ui'); }
-  if (/^(frank|below|cut|above|wide)$/.test(q.get('view') || '')) { setView(q.get('view')); if (view === 'below') aboveT = 1; }
+  if (/^(frank|below|cut|above|wide)$/.test(q.get('view') || '')) { setView(q.get('view'), true); if (view === 'below') aboveT = 1; }
   if (q.get('light') === 'side') lightBtn.click();
   updateControls();
 
