@@ -9,3 +9,5 @@ dist/
 *.log
 .DS_Store
 tools/raw/
+# the videos (takes, edit lists, narration, recordings, renders) live only on this machine
+promo/

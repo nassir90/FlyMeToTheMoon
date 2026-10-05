@@ -65,6 +65,7 @@
   <label for="swell"><span class="squeeze">Swell</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="swell" type="range" min="0" max="1.2" step="0.01" value="0.8"></div>
   <label for="speed"><span class="squeeze">Speed</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="speed" type="range" min="0.1" max="1.5" step="0.01" value="0.6"></div>
   <label for="height"><span class="squeeze">Height</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="height" type="range" min="-1" max="1" step="0.01" value="0"></div>
+  <label for="drift"><span class="squeeze">Drift</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="drift" type="range" min="-1" max="1" step="0.01" value="0"></div>
   <label for="halo"><span class="squeeze">Halo</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="halo" type="range" min="0" max="2" step="0.01" value="1"></div>
   <label for="leak"><span class="squeeze">Leak</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="leak" type="range" min="0" max="1" step="0.01" value="0.5"></div>
   <label for="murk"><span class="squeeze">Murk</span></label><div class="line"><canvas aria-hidden="true"></canvas><input id="murk" type="range" min="0" max="1.5" step="0.01" value="0.7"></div>
@@ -767,6 +768,7 @@
   document.getElementById('swell').addEventListener('input', e => uniforms.uSwell.value = parseFloat(e.target.value));
   document.getElementById('speed').addEventListener('input', e => waveSpeed = parseFloat(e.target.value));
   document.getElementById('height').addEventListener('input', e => moonHeight = parseFloat(e.target.value));
+  document.getElementById('drift').addEventListener('input', e => moonDrift = parseFloat(e.target.value));
   document.getElementById('murk').addEventListener('input', e => uniforms.uMurk.value = parseFloat(e.target.value));
   document.getElementById('leak').addEventListener('input', e => uniforms.uLeak.value = parseFloat(e.target.value));
   document.getElementById('halo').addEventListener('input', e => uniforms.uHaloGain.value = parseFloat(e.target.value));
@@ -826,7 +828,7 @@
   }
 
   const clock = new THREE.Clock();
-  let t = 0, wt = 0, simBudget = 0, aboveT = 0, aboveTo = 0, moonHeight = 0;
+  let t = 0, wt = 0, simBudget = 0, aboveT = 0, aboveTo = 0, moonHeight = 0, moonDrift = 0, driftY = 0;
   let waveSpeed = 0.6;
   function frame() {
     const dt = Math.min(clock.getDelta(), 0.05);
@@ -856,8 +858,15 @@
     if (aboveT !== aboveTo) aboveT = reduceMotion ? aboveTo : Math.max(0, Math.min(1, aboveT + Math.sign(aboveTo - aboveT) * dt/1.4));
     const up = aboveT*aboveT*(3 - 2*aboveT);
     uniforms.uAbove.value = up;
-    moonGroup.position.y = -0.5 + 3.34*up + moonHeight*2.4 + Math.sin(t * 0.3) * 0.05;
     moonGroup.scale.setScalar(1 - 0.38*up);
+    // Drift: the moon travels steadily up or down through the frame (the sky stays as it is); once it
+    // has left one edge it comes back in at the other
+    const half = camera.position.z * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+    const span = 2 * (half + MOON_R * moonGroup.scale.x), low = 0.2 - span / 2;
+    if (!paused && !reduceMotion) driftY = (driftY + dt * moonDrift * 0.12 * span) % span;
+    let my = -0.5 + 3.34*up + moonHeight*2.4 + Math.sin(t * 0.3) * 0.05;
+    if (driftY !== 0) my = low + (((my + driftY - low) % span) + span) % span;
+    moonGroup.position.y = my;
     updateMoonScreen();
 
     if (bloomOn) renderBloom();
@@ -1006,7 +1015,7 @@
 
   // Settings from the address, e.g. ?sky=sunset&waves=1.2&swell=1.2&speed=0.3&bloom=0&turn=90&ui=0
   const q = new URLSearchParams(location.search);
-  for (const [key, id] of [['wind','wind'], ['warp','warp'], ['waves','chop'], ['swell','swell'], ['speed','speed'], ['height','height'], ['halo','halo'], ['leak','leak'], ['murk','murk'], ['glow','glow']]) {
+  for (const [key, id] of [['wind','wind'], ['warp','warp'], ['waves','chop'], ['swell','swell'], ['speed','speed'], ['height','height'], ['drift','drift'], ['halo','halo'], ['leak','leak'], ['murk','murk'], ['glow','glow']]) {
     if (q.has(key)) { const el = document.getElementById(id); el.value = q.get(key); el.dispatchEvent(new Event('input')); }
   }
   if (q.has('sky')) {

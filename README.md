@@ -76,7 +76,7 @@ The **In front** button sends the moon up behind the surface (it then reads **Be
 
 ![The moon behind the water by day](docs/screenshots/19-moon-behind-day.jpg)
 
-The **Height** line raises or lowers the moon, in the water or in the sky. Lowered behind the surface, it sinks into the waterline and is cut off where the window ends.
+The **Height** line raises or lowers the moon, in the water or in the sky. Lowered behind the surface, it sinks into the waterline and is cut off where the window ends. **Drift** keeps it moving: the moon travels steadily down or up through the frame, through the window and the dark water below it, and comes back in at the other edge, while the time of day stays put.
 
 ![The moon raised](docs/screenshots/20-height.jpg)
 
@@ -123,6 +123,7 @@ The controls sit in the lower right: the sky presets along the top, then plain w
 | Swell | Strength of the long swells | 0 – 1.2 | 0.8 |
 | Speed | How fast all the water moves (also slows the simulation) | 0.1 – 1.5 | 0.6 |
 | Height | Raises or lowers the moon, in the water or in the sky | −1 – 1 | 0 |
+| Drift | Sends the moon slowly down (left) or up (right) through the frame; once it leaves one edge it comes back in at the other. The sky stays as it is | −1 – 1 | 0 |
 | Halo | Strength of the glow around the big moon (on top of what the sky sets) | 0 – 2 | 1 |
 | Leak | How much scrambled light, and with the moon Behind, the moon itself, leaks into the dark water | 0 – 1 | 0.5 |
 | Murk | How cloudy the water is: the glow around the window's edge and how quickly the distance fades | 0 – 1.5 | 0.7 |
@@ -145,6 +146,7 @@ Every control can be set from the address, which is how the screenshots here wer
 ?speed=0.3                        slow motion
 ?moon=behind                      start with the moon behind the water
 ?height=1                         raise the moon (−1 lowers it)
+?drift=-0.35                      the moon sinks slowly through the frame and comes back in at the top
 ?halo=0                           no glow around the moon
 ?leak=0                           no light leaking into the dark water
 ?murk=0                           clear water (1.5 is very cloudy)
