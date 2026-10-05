@@ -890,18 +890,16 @@
   const DEFAULT_MOON = new THREE.Vector3(0, 0.574, 0.819);
   let view = 'below';
   const views = (() => {
-    const V = { eyeZ: 0, eyeDepth: 3, cutMoon: [8.6, 6], side: false, wideMoon: new THREE.Vector3(0.3, 0.2, 1).normalize(), aboveMoon: new THREE.Vector3(0, 0.16, 1).normalize() };
+    const V = { eyeZ: 0, eyeDepth: 3, cutMoon: [3.15, 5.7], side: false, wideMoon: new THREE.Vector3(0.3, 0.2, 1).normalize(), aboveMoon: new THREE.Vector3(0, 0.16, 1).normalize() };
     const own = {
       uZr: { value: new THREE.Vector2() }, uSunDir: { value: new THREE.Vector3() }, uCamPos: { value: new THREE.Vector3() },
-      uEyeP: { value: new THREE.Vector3(0, -3, 0) }, uSideLight: { value: 0 },
-      uSeaMoon: { value: new THREE.Vector3() },   // the moon as the sea views see it (in Cut, where it is on screen)
-      uClipX: { value: -1e9 },                     // the sea starts here (Cut: at the cut)
+      uEyeP: { value: new THREE.Vector3(0, -3, 0) }, uMoonScr: { value: new THREE.Vector3() }, uSideLight: { value: 0 },
       uMoonMap: moonUniforms.uMap, uMoonMul: moonUniforms.uMoonMul, uMoonMix: moonUniforms.uMoonMix,
       uMoonSin: { value: Math.sqrt(1 - 0.995 * 0.995) },   // the moon's angular radius (sine) in the sea views
     };
     const U = Object.assign({}, uniforms, own);
     const HEAD = WATER + `
-      uniform vec2 uZr, uRes; uniform vec3 uSunDir, uCamPos, uEyeP, uSeaMoon, uMoonMul; uniform vec4 uMoonMix; uniform float uSideLight, uMoonSin, uClipX; uniform sampler2D uMoonMap;
+      uniform vec2 uZr, uRes; uniform vec3 uSunDir, uCamPos, uEyeP, uMoonScr, uMoonMul; uniform vec4 uMoonMix; uniform float uSideLight, uMoonSin; uniform sampler2D uMoonMap;
       // the moon's lit face under the current sky: its average albedo through the preset's tint and wash, as the
       // moon's own shader does. Reflections of it are no brighter than this
       vec3 moonFaceCol(){ return mix(vec3(0.435, 0.608, 0.604)*uMoonMul, uMoonMix.rgb, uMoonMix.a); }
@@ -963,16 +961,13 @@
     }
     const lerpRow = (A, z) => { const f = Math.max(0, Math.min(NP - 1, (z - pz0) / (pz1 - pz0) * (NP - 1))), i = Math.min(NP - 2, Math.floor(f)), t = f - i; return A[i] + (A[i + 1] - A[i]) * t; };
     const hAt = (x, z) => { const xf = Math.max(0, Math.min(ROWS - 1, x)), j = Math.min(ROWS - 2, Math.floor(xf)), t = xf - j; const a = lerpRow(Hh[j], z); return a + (lerpRow(Hh[j + 1], z) - a) * t; };
-    const cutCam = new THREE.PerspectiveCamera(52, 1, 0.1, 2000), CZ = 1.2;
-    // Cut and Wide share one framing: from back and up, looking across the water toward the horizon, tilted down
-    // just enough to take in the eye under the surface
+    const cutCam = new THREE.PerspectiveCamera(38, 1, 0.1, 600), CZ = 1.2;
     function placeCut() {
-      const asp = innerWidth / innerHeight, tv = Math.tan(THREE.MathUtils.degToRad(cutCam.fov / 2));
-      const dist = Math.max(19, 6.5 / (tv * asp)), pitch = THREE.MathUtils.degToRad(22), ly = asp < 1 ? -0.6 : -1.5;
-      cutCam.aspect = asp; cutCam.position.set(-dist * Math.cos(pitch), ly + dist * Math.sin(pitch), CZ);
-      cutCam.lookAt(cutCam.position.x + 10, cutCam.position.y - Math.tan(0.16) * 10, CZ);
+      const asp = innerWidth / innerHeight, tv = Math.tan(THREE.MathUtils.degToRad(19));
+      const dist = Math.max(19, 6.5 / (tv * asp)), pitch = THREE.MathUtils.degToRad(22), ly = asp < 1 ? -0.6 : -1.5;   // on a tall screen, centred a little higher
+      cutCam.aspect = asp; cutCam.position.set(-dist * Math.cos(pitch), ly + dist * Math.sin(pitch), CZ); cutCam.lookAt(0, ly, CZ);
       cutCam.updateProjectionMatrix(); cutCam.updateMatrixWorld();
-      const halfW = (dist + 6) * tv * asp + 2; zr = [CZ - halfW, CZ + halfW];
+      const halfW = dist * tv * asp + 2; zr = [CZ - halfW, CZ + halfW];
     }
     const v3 = new THREE.Vector3();
     const toScreen = (x, y, z, cam) => { v3.set(x, y, z).project(cam); return [(v3.x + 1) / 2 * innerWidth, (1 - v3.y) / 2 * innerHeight]; };
@@ -991,6 +986,16 @@
     const quads = (cols, rows) => { const ix = []; for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) { const a = j * (cols + 1) + i, b = a + 1, c = a + cols + 1, d = c + 1; ix.push(a, c, b, b, c, d); } return ix; };
     const face = geom((NF + 1) * 3), top = geom((NZ + 1) * (NX + 1));
     face.setIndex(quads(NF, 2)); top.setIndex(quads(NZ, NX));
+    const cutSky = mat(`
+      varying vec3 vP;
+      void main(){
+        // the preset's sky, low to high, with the halo round the moon (the moon itself is the real one, drawn over it)
+        vec2 f = gl_FragCoord.xy;
+        vec3 sky = mix(uSkyLow, uSkyHigh, smoothstep(0.3, 1.0, f.y / uRes.y));
+        float r = length(f - uMoonScr.xy) / uMoonScr.z;
+        sky += uHalo*uHaloGain*exp(-max(r - 0.99, 0.0)/0.19) + uGlowA*0.5*exp(-r*r/6.0);
+        gl_FragColor = vec4(sky, 1.0);
+      }`, { depthWrite: false });
     const cutFace = mat(`
       varying vec3 vP;
       void main(){
@@ -1041,6 +1046,8 @@
         if (uSideLight < 0.5) { vec4 L = lookAlong(normalize(vP - uEyeP), 0.5); col = mix(col, L.rgb + moonLight()*L.w, 0.85); }
         gl_FragColor = vec4(col, 1.0 - smoothstep(4.0, 5.0, vP.x));   // the far edge fades into the sky
       }`, { transparent: true, depthWrite: false });
+    const skyPlane = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), cutSky); skyPlane.rotation.y = -Math.PI / 2; skyPlane.position.set(300, 0, 0);
+    const cutSkyScene = new THREE.Scene(); cutSkyScene.add(skyPlane);
     cutScene.add(new THREE.Mesh(face, cutFace), new THREE.Mesh(top, cutTop));
     const ov = document.getElementById('overlay'), og = ov.getContext('2d');
     function drawCutOverlay() {
@@ -1060,21 +1067,20 @@
       uniforms.uSkyMoon.value.set(...cutMoonDir());
       own.uEyeP.value.set(0, -V.eyeDepth, V.eyeZ); own.uCamPos.value.copy(cutCam.position); own.uSideLight.value = V.side ? 1 : 0;
       const M = cutMoonWorld(); own.uSunDir.value.set(...M).sub(cutCam.position).normalize();
-      V.moonScr = toScreen(...M, cutCam);
+      const ms = toScreen(...M, cutCam), pr = renderer.getPixelRatio();
+      own.uMoonScr.value.set(ms[0] * pr, (innerHeight - ms[1]) * pr, Math.min(innerWidth, innerHeight) * 0.07 * pr);
+      V.moonScr = ms;
       const fp = face.attributes.position.array, tp = top.attributes.position.array, [z0, z1] = zr;
       for (let i = 0; i <= NF; i++) { const z = pz0 + (pz1 - pz0) * i / NF; fp.set([0, hAt(0, z), z], i * 3); fp.set([0, MID, z], (i + NF + 1) * 3); fp.set([0, DEEP, z], (i + 2 * (NF + 1)) * 3); }
       for (let i = 0; i <= NZ; i++) { const z = z0 + (z1 - z0) * i / NZ; for (let j = 0; j <= NX; j++) { const x = XB * j / NX; tp.set([x, hAt(x, z), z], (j * (NZ + 1) + i) * 3); } }
       for (const g of [face, top]) { g.attributes.position.needsUpdate = true; g.computeBoundingSphere(); }
-      // behind the cut: Wide's sky and open sea (from the cut on), the moon where it is on screen, setting behind
-      // that horizon; its glows, halo and path on the sea follow it there
-      const rpx = Math.min(innerWidth, innerHeight) * 0.07, tv = 2 * Math.tan(THREE.MathUtils.degToRad(cutCam.fov / 2));
-      const sinR = Math.sin(Math.atan(rpx * tv / innerHeight)), seen = own.uSunDir.value;
-      V.moonR = rpx; own.uMoonSin.value = sinR; own.uSeaMoon.value.copy(seen); own.uClipX.value = 0;
-      dome.position.copy(cutCam.position); sea.position.set(cutCam.position.x, 0, cutCam.position.z);
       renderer.setRenderTarget(null); renderer.clear();
-      renderer.render(aboveSkyScene, cutCam);
-      drawMoon(cutCam, cutCam.position.clone().addScaledVector(seen, 600), 600 * sinR);
-      renderer.render(aboveScene, cutCam);
+      renderer.render(cutSkyScene, cutCam);
+      const mc = new THREE.Vector3(...M), rpx = Math.min(innerWidth, innerHeight) * 0.07;
+      V.moonR = rpx;
+      // drawn far behind the water (the same place and size on screen), so lowered it sets behind the horizon
+      const k = (40 - cutCam.position.x) / (mc.x - cutCam.position.x), far = cutCam.position.clone().lerp(mc, k);
+      drawMoon(cutCam, far, rpx * far.distanceTo(cutCam.position) * 2 * Math.tan(THREE.MathUtils.degToRad(cutCam.fov / 2)) / innerHeight);
       renderer.render(cutScene, cutCam);
       drawCutOverlay();
     }
@@ -1092,19 +1098,18 @@
     const aboveCam = new THREE.PerspectiveCamera(50, 1, 0.1, 2000), aboveScene = new THREE.Scene();
     const dome = new THREE.Mesh(new THREE.SphereGeometry(900, 48, 24), mat(`
       varying vec3 vP;
-      void main(){ gl_FragColor = vec4(skyDome(normalize(vP - uCamPos), uSeaMoon, 0.0), 1.0); }`, { side: THREE.BackSide, depthWrite: false }));
+      void main(){ gl_FragColor = vec4(skyDome(normalize(vP - uCamPos), SKY_MOON, 0.0), 1.0); }`, { side: THREE.BackSide, depthWrite: false }));
     const sea = new THREE.Mesh(new THREE.PlaneGeometry(1600, 1600, 1, 1).rotateX(-Math.PI / 2), mat(`
       varying vec3 vP;
       void main(){
-        if (vP.x < uClipX) discard;
         float dist = length(vP.xz - uCamPos.xz);
         vec3 sl = surfaceSlope(vP.xz, dist);
         vec3 N = normalize(vec3(-sl.x, 1.0, -sl.y)), Vd = normalize(vP - uCamPos), R = reflect(Vd, N);
         R.y = abs(R.y);
         float F = 0.02 + 0.98*pow(1.0 - max(dot(-Vd, N), 0.0), 5.0);
         vec3 body = mix(hazeColour(vec3(0.0, 0.0, 1.0), 0.5), murkColour(), 0.25*uMurk);
-        vec3 col = mix(body, skyDome(R, uSeaMoon, 1.0), F);
-        col += moonFaceCol() * F * 1.2 * exp((dot(R, uSeaMoon) - 1.0)/(0.0025 * uMoonSin*uMoonSin/0.00998));   // (sized to the moon)   // the moon sparkling on the wave facets: its path of light
+        vec3 col = mix(body, skyDome(R, SKY_MOON, 1.0), F);
+        col += moonFaceCol() * F * 1.2 * exp((dot(R, SKY_MOON) - 1.0)/(0.0025 * uMoonSin*uMoonSin/0.00998));   // (sized to the moon)   // the moon sparkling on the wave facets: its path of light
         col *= 1.0 - clamp(sl.z*0.6, -0.2, 0.3);   // the broad waves' crests and troughs, as in the scene's light bands
         // only right at the horizon does the water fade out (a narrow band, as far off as the water goes), so a low
         // moon is cut by the sea and shows through just a sliver, rather than being painted over
@@ -1116,12 +1121,12 @@
       aboveCam.aspect = innerWidth / innerHeight; aboveCam.position.set(0, 2.2, 0); aboveCam.lookAt(0, 2.2 - Math.tan(0.14) * 10, 10);
       aboveCam.updateProjectionMatrix(); aboveCam.updateMatrixWorld();
     }
-    // Wide: Cut's camera, without the cut
+    // Wide: from about where Cut's camera is, looking the same way, but tilted up enough to see the horizon
     const wideCam = new THREE.PerspectiveCamera(52, 1, 0.1, 2000);
     function placeWide() {
       placeCut();
       const p = cutCam.position;
-      wideCam.aspect = innerWidth / innerHeight; wideCam.position.copy(p); wideCam.quaternion.copy(cutCam.quaternion);
+      wideCam.aspect = innerWidth / innerHeight; wideCam.position.copy(p); wideCam.lookAt(p.x + 10, p.y - Math.tan(0.16) * 10, p.z);
       wideCam.updateProjectionMatrix(); wideCam.updateMatrixWorld();
     }
     // entering Wide: the moon where it was on screen in Cut
@@ -1136,7 +1141,7 @@
     function renderSea() {
       if (view === 'wide') placeWide(); else placeAbove();
       const cam = seaCam(), m = seaMoon();
-      uniforms.uEyeDepth.value = 3; uniforms.uEyeOff.value.set(0, 0); uniforms.uSkyMoon.value.copy(m); own.uSeaMoon.value.copy(m); own.uClipX.value = -1e9;
+      uniforms.uEyeDepth.value = 3; uniforms.uEyeOff.value.set(0, 0); uniforms.uSkyMoon.value.copy(m);
       own.uCamPos.value.copy(cam.position); own.uEyeP.value.set(0, -3, 0);
       dome.position.copy(cam.position); sea.position.set(cam.position.x, 0, cam.position.z);
       renderer.setRenderTarget(null); renderer.clear();
