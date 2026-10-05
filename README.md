@@ -112,7 +112,7 @@ Halfway through the fade from Day to Sunset:
 
 Two more views put the moon in the sky above the water, where you can move it. Both are drawn with the scene's own code, so they show the same water: the surface is the same simulated ripples, swells and waves, the light is computed the same way, and every colour follows the sky preset.
 
-**Cut** opens the water up and looks at it from the side. The camera's eye sits under the surface; drag it about, or drag anywhere else to move the moon. A light overlay draws the surface as a wireframe and a fan of rays from the eye, each bending out through the surface or, past 48.6° from the local surface, reflecting back down (dashed). The water is lit one of two ways (the **Eye light** / **Side light** button):
+**Cut** opens the water up and looks at it from the side. The camera's eye sits under the surface; drag it about, or drag anywhere else to move the moon. A light overlay draws the surface as a wireframe. The water is lit one of two ways (the **Eye light** / **Side light** button):
 
 - **Eye light**: the light reaching the eye. Every direction from it glows with exactly what the scene shows the camera looking that way, so a fan of light converges on the eye: the sky through Snell's window, the moon's image as its brightest beam, and darkness past the critical angle, all moving with the waves. On the surface above, the same light draws the window as a bright circle.
 - **Side light**: god rays as you'd see them from the side: moonlight refracted down into the water and gathered under the broad waves' crests, shafts with depth that fade as they go down.
