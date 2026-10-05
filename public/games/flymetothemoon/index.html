@@ -418,9 +418,12 @@
       // standing like a flat ceiling. The first stretch above the camera stays clear.
       float hazeAmount(float dist){ return 1.0 - exp(-max(dist - 2.5, 0.0) * (0.03 + 0.07*uMurk)); }
       vec3 hazeColour(vec3 d, float u){ return underwater(normalize(vec3(d.x, 0.03, d.z)), u) + murkColour()*0.12*uMurk; }
+      vec4 lookAlong(vec3 d, float u);
       vec4 lookUp(vec2 s){
-        float u = 0.506 + s.x*0.2375;                      // horizontal position across the view, for the palette
-        vec3 d = viewRay(s);
+        return lookAlong(viewRay(s), 0.506 + s.x*0.2375);  // u: horizontal position across the view, for the palette
+      }
+      // what the camera sees looking along d (a direction from the eye, three units under the surface)
+      vec4 lookAlong(vec3 d, float u){
         gT = 0.0; gLeakW = 0.0;
         if (d.y < 0.03) {                                  // looking sideways: just water...
           vec3 w = hazeColour(d, u);                      // (the surface this way is so far off it's lost in the haze)
