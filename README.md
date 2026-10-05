@@ -121,7 +121,7 @@ Two more views put the moon in the sky above the water, where you can move it. B
 
 ![Cut, with god rays seen from the side](docs/screenshots/25-cut-side.jpg)
 
-In both, the moon in the sky is the real one, the same 3D moon as in Below, with its colours, shading and spin.
+In both, the moon in the sky is the real one, the same 3D moon as in Below, with its colours, shading and spin, and its light (its beam to the eye, its glint, its path on the sea, the god rays) takes its colour under each sky: teal at night, gold at sunset, copper in the eclipse.
 
 **Above** looks across the water from just above it. The moon hangs over the sea with its path of light broken up on the waves, and the surface fades into the sky over a long gradient toward the horizon. Drag to move the moon.
 

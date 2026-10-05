@@ -866,11 +866,18 @@
     const own = {
       uZr: { value: new THREE.Vector2() }, uSunDir: { value: new THREE.Vector3() }, uCamPos: { value: new THREE.Vector3() },
       uEyeP: { value: new THREE.Vector3(0, -3, 0) }, uMoonScr: { value: new THREE.Vector3() }, uSideLight: { value: 0 },
-      uMoonMap: moonUniforms.uMap,
+      uMoonMap: moonUniforms.uMap, uMoonMul: moonUniforms.uMoonMul, uMoonMix: moonUniforms.uMoonMix,
     };
     const U = Object.assign({}, uniforms, own);
     const HEAD = WATER + `
-      uniform vec2 uZr, uRes; uniform vec3 uSunDir, uCamPos, uEyeP, uMoonScr; uniform float uSideLight; uniform sampler2D uMoonMap;
+      uniform vec2 uZr, uRes; uniform vec3 uSunDir, uCamPos, uEyeP, uMoonScr, uMoonMul; uniform vec4 uMoonMix; uniform float uSideLight; uniform sampler2D uMoonMap;
+      // the moon's light: the colour of its lit face under the current sky (its average albedo through the preset's
+      // tint and wash, as the moon's own shader does), as bright as its image in the water
+      vec3 moonLight(){
+        vec3 face = mix(vec3(0.435, 0.608, 0.604)*uMoonMul, uMoonMix.rgb, uMoonMix.a);
+        const vec3 Y = vec3(0.2126, 0.7152, 0.0722);
+        return face * dot(uImage, Y) / max(dot(face, Y), 1e-3);
+      }
       // the scene's slope at a point of the surface, its ripples fading with distance from the eye as the scene's do
       vec3 slopeAt(vec2 xz){ return surfaceSlope(xz, length(vec3(xz.x - uEyeP.x, uEyeP.y, xz.y - uEyeP.z))); }
       // the moon's face at disc coordinates q (|q| < 1): its own albedo map, tinted like its image in the water
@@ -878,7 +885,7 @@
         vec3 n = vec3(q, sqrt(max(1.0 - dot(q, q), 0.0)));
         vec2 uv = vec2(0.5 + atan(n.x, n.z)/6.2832, 0.5 + asin(clamp(n.y, -1.0, 1.0))/3.1416);
         vec3 a = texture2D(uMoonMap, uv).rgb;
-        return uImage * (0.45 + 0.9*dot(a, vec3(0.3, 0.55, 0.15))) * (0.78 + 0.22*n.z);
+        return moonLight() * (0.45 + 0.9*dot(a, vec3(0.3, 0.55, 0.15))) * (0.78 + 0.22*n.z);
       }
       // the scene's sky in direction d, with the moon in direction m: the halo round it as in Below, a little of
       // the sky's glow, and (only in reflections, face > 0) its face as its image in the water is coloured
@@ -976,14 +983,14 @@
             float focus = clamp(-chop(warpXZ(sp), length(vec3(sp.x, 3.0, sp.y))).z*uChop*2.4 + 0.1, 0.0, 1.6);
             acc += focus * exp(-t/3.2) * exp(-float(i)*ds/5.0) * ds;
           }
-          col += (uImage*0.3 + uSkyHigh*0.3) * acc * 0.32;
+          col += (moonLight()*0.3 + uSkyHigh*0.3) * acc * 0.32;
         } else {
           // the light reaching the eye: every direction from it glows with what the scene shows it looking that
           // way, all the way to the surface, so the fan converges on it; sideways it is the scene's haze and,
           // looking down, the scene's deep water
           vec3 r = vP - uEyeP, d = normalize(vec3(0.0, r.y, r.z));
           vec3 light;
-          if (d.y > 0.0) { vec4 L = lookAlong(d, 0.5); light = L.rgb + uImage*L.w; }
+          if (d.y > 0.0) { vec4 L = lookAlong(d, 0.5); light = L.rgb + moonLight()*L.w; }
           else light = mix(hazeColour(d, 0.5), underwater(d, 0.5), smoothstep(0.0, 0.8, -d.y));
           col = mix(col, light, 0.85*smoothstep(0.0, 0.6, length(r)));
         }
@@ -997,11 +1004,11 @@
         vec3 N = normalize(vec3(-g.x, 1.0, -g.y)), Vd = normalize(vP - uCamPos), R = reflect(Vd, N);
         vec3 sky = mix(uSkyLow, uSkyHigh, smoothstep(0.05, 0.9, clamp(R.y + 0.3, 0.0, 1.0)));
         float c = dot(R, uSunDir);
-        sky += uGlowA*exp((c - 1.0)/0.03) + uImage*1.6*exp((c - 1.0)/0.006);
+        sky += uGlowA*exp((c - 1.0)/0.03) + moonLight()*1.6*exp((c - 1.0)/0.006);
         float F = 0.02 + 0.98*pow(1.0 - max(dot(-Vd, N), 0.0), 5.0);
         vec3 col = mix(hazeColour(vec3(0.0, 0.0, 1.0), 0.6), sky, clamp(0.25 + F, 0.0, 1.0));
         // ...and, with the eye's light, what the eye sees there: Snell's window as a bright circle above it
-        if (uSideLight < 0.5) { vec4 L = lookAlong(normalize(vP - uEyeP), 0.5); col = mix(col, L.rgb + uImage*L.w, 0.85); }
+        if (uSideLight < 0.5) { vec4 L = lookAlong(normalize(vP - uEyeP), 0.5); col = mix(col, L.rgb + moonLight()*L.w, 0.85); }
         gl_FragColor = vec4(col, 1.0 - smoothstep(2.6, 5.0, vP.x));   // the far side fades into the sky
       }`, { transparent: true, depthWrite: false });
     const skyPlane = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), cutSky); skyPlane.rotation.y = -Math.PI / 2; skyPlane.position.set(300, 0, 0);
@@ -1064,7 +1071,7 @@
         float F = 0.02 + 0.98*pow(1.0 - max(dot(-Vd, N), 0.0), 5.0);
         vec3 body = mix(hazeColour(vec3(0.0, 0.0, 1.0), 0.5), murkColour(), 0.25*uMurk);
         vec3 col = mix(body, skyDome(R, SKY_MOON, 1.0), F);
-        col += uImage * F * 3.0 * exp((dot(R, SKY_MOON) - 1.0)/0.0025);   // the moon sparkling on the wave facets: its path of light
+        col += moonLight() * F * 3.0 * exp((dot(R, SKY_MOON) - 1.0)/0.0025);   // the moon sparkling on the wave facets: its path of light
         col *= 1.0 - clamp(sl.z*0.6, -0.2, 0.3);   // the broad waves' crests and troughs, as in the scene's light bands
         // a long fade into the sky toward the horizon
         vec3 horizon = skyDome(normalize(vec3(Vd.x, 0.0, Vd.z)), SKY_MOON, 0.0);
