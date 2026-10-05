@@ -855,8 +855,7 @@
   //   Cut: the water cut open and seen from the side, with the camera's eye under it (drag it about). The cut
   //   face shows either the light reaching the eye (a fan converging on it, each direction the colour the
   //   scene shows looking that way, and Snell's window on the surface above it) or god rays as seen from
-  //   the side (moonlight refracted down, gathered under the broad waves' crests). A light overlay draws the
-  //   surface as a wireframe, and the eye.
+  //   the side (moonlight refracted down, gathered under the broad waves' crests). A light overlay marks the eye.
   //   Above: across the water from just above it, the moon and its path of light on the waves, the
   //   surface fading into the sky over a long gradient toward the horizon.
   // =====================================================================================
@@ -895,7 +894,7 @@
 
     // ---- Cut ----
     // the surface along the cut, from the scene: slopes for rows x = 0..5 read back from the GPU, integrated into heights
-    // (for the wireframe and the meshes)
+    // (for the meshes)
     const NP = 2048, ROWS = 6, MARGIN = 15, XB = 5;
     const probeRT = new THREE.WebGLRenderTarget(NP, ROWS, { type: THREE.FloatType, format: THREE.RGBAFormat, depthBuffer: false, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
     const probeScene = new THREE.Scene();
@@ -1012,15 +1011,9 @@
       const dpr = Math.min(devicePixelRatio || 1, 2), W = Math.round(innerWidth * dpr), H = Math.round(innerHeight * dpr);
       if (ov.width !== W || ov.height !== H) { ov.width = W; ov.height = H; }
       og.setTransform(dpr, 0, 0, dpr, 0, 0); og.clearRect(0, 0, innerWidth, innerHeight);
-      og.lineCap = 'round'; og.lineJoin = 'round'; og.strokeStyle = '#fff';
-      const S = (x, y, z) => toScreen(x, y, z, cutCam), line = (pts) => { og.beginPath(); pts.forEach((p, i) => i ? og.lineTo(...p) : og.moveTo(...p)); og.stroke(); };
-      // the surface as a wireframe: rows receding (fading toward the back) and lines across them
-      const [z0, z1] = zr, dz = (z1 - z0) / 260;
-      for (let j = 4; j >= 0; j--) { const pts = []; for (let z = z0; z <= z1; z += dz) pts.push(S(j, hAt(j, z), z)); og.globalAlpha = j ? 0.4 * (1 - Math.max(0, j - 2.6) / 2.4) : 0.9; og.lineWidth = j ? 1 : 1.5; line(pts); }
-      og.globalAlpha = 0.25; og.lineWidth = 1;
-      for (let z = Math.ceil(z0); z <= z1; z += 1) { const pts = []; for (let x = 0; x <= 4.001; x += 0.5) pts.push(S(x, hAt(x, z), z)); line(pts); }
+      og.strokeStyle = '#fff';
       // the eye
-      const E = S(0, -V.eyeDepth, V.eyeZ);
+      const E = toScreen(0, -V.eyeDepth, V.eyeZ, cutCam);
       og.globalAlpha = 1; og.fillStyle = '#fff'; og.beginPath(); og.arc(E[0], E[1], 5, 0, 7); og.fill();
       og.globalAlpha = 0.6; og.beginPath(); og.arc(E[0], E[1], 11, 0, 7); og.stroke(); og.globalAlpha = 1;
       V.eyeScr = E;
