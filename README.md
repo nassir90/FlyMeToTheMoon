@@ -112,7 +112,7 @@ Halfway through the fade from Day to Sunset:
 
 Three more views put the moon in the sky above the water, where you can move it. All are drawn with the scene's own code, so they show the same water: the surface is the same simulated ripples, swells and waves, the light is computed the same way, and every colour follows the sky preset.
 
-**Cut** opens the water up and looks at it from the side. The camera's eye sits under the surface; drag it about. As everywhere, drag the moon to spin it, Alt+drag to move it, and tap the water to drop a ripple. The water is lit one of two ways (the **Eye light** / **Side light** button):
+**Cut** opens the water up and looks at it from the side. The camera's eye sits under the surface; drag it about. As everywhere, drag the moon to spin it, Alt+drag to move it, and tap the water to drop a ripple. The water is lit one of two ways (the **Light** parameter, Eye or Side, shown with P):
 
 - **Eye light**: the light reaching the eye. Every direction from it glows with exactly what the scene shows the camera looking that way, so a fan of light converges on the eye: the sky through Snell's window, the moon's image as its brightest beam, and darkness past the critical angle, all moving with the waves. On the surface above, the same light draws the window as a bright circle.
 - **Side light**: god rays as you'd see them from the side: moonlight refracted down into the water and gathered under the broad waves' crests, shafts with depth that fade as they go down.
@@ -137,7 +137,7 @@ In all of them, the moon in the sky is the real one, the same 3D moon as in Belo
 
 ## Controls
 
-The controls sit in the lower right: the sky presets and the five views along the top, then plain white lines that reach left to line up under the first preset, solid up to the current value and blending quickly into a faint line that barely wobbles, then a row of buttons. The lines are hidden to begin with: press **P** to show or hide them. Drag along a line, or focus it and use the arrow keys. Press **H** to hide or show all the controls. Only the controls that do something in the current view are shown: Height, Drift and Bloom are Frank's and Below's, Glow shows only with the bloom on, Leak only where the camera under the water is looking (Frank, Below, and Cut with the eye's light), and the light button only in Cut.
+The controls sit in the lower right: the sky presets and the five views along the top, then plain white lines that reach left to line up under the first preset, solid up to the current value and blending quickly into a faint line that barely wobbles, then a row of buttons. The lines are hidden to begin with: press **P** to show or hide them. Drag along a line, or focus it and use the arrow keys. Press **H** to hide or show all the controls. Only the controls that do something in the current view are shown: Height, Drift and Bloom are Frank's and Below's, Glow shows only with the bloom on, Leak only where the camera under the water is looking (Frank, Below, and Cut with the eye's light), and Light only in Cut.
 
 ![The line controls](docs/screenshots/11-controls.jpg)
 
@@ -157,7 +157,7 @@ The controls sit in the lower right: the sky presets and the five views along th
 | Murk | How cloudy the water is: the glow around the window's edge and how quickly the distance fades | 0 – 1.5 | 0.7 |
 | Glow | Strength of the bloom | 0 – 2 | 0.6 |
 | Bloom on/off | Turns the bloom on or off (a parameter line, shown with P) | | on |
-| Eye light / Side light | In Cut: the light reaching the eye, or god rays seen from the side | | Eye light |
+| Light: Eye / Side | Cut's parameter (shown with P): the light reaching the eye, or god rays seen from the side | | Eye |
 | ‖ / ▶ (bottom left) | Pauses and resumes: freezes the water and the moon | | playing |
 
 Tap the water to drop a ripple, or drag across it to stir. In every view: drag the moon to spin it, Alt+drag to move it.
