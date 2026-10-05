@@ -144,7 +144,7 @@ The controls sit in the lower right: the sky presets and the five views along th
 | Control | What it does | Range | Default |
 |---|---|---|---|
 | Day · Sunset · Night · Midnight · Eclipse | Sky presets; pressing one fades the scene to it | | Night |
-| Frank · Below · Cut · Above · Wide | The view (Frank and Below glide into each other; any other switch dissolves over 0.8 s): from under the water with the moon in front of it (Frank) or behind it (Below), the water cut open from the side, across it from just above, or across it from where Cut looks | | Frank |
+| Frank · Below · Cut · Above · Wide | The view; switching moves the camera (see below): from under the water with the moon in front of it (Frank) or behind it (Below), the water cut open from the side, across it from just above, or across it from where Cut looks | | Frank |
 | Wind | Strength of the simulated wind ripples | 0 – 1.2 | 0.45 |
 | Warp | How much the height grid is bent | 0 – 2 | 1 |
 | Waves | Strength of the broad wind sea | 0 – 1.2 | 0.9 |
@@ -161,6 +161,8 @@ The controls sit in the lower right: the sky presets and the five views along th
 | ‖ / ▶ (bottom left) | Pauses and resumes: freezes the water and the moon | | playing |
 
 Tap the water to drop a ripple, or drag across it to stir. In every view: drag the moon to spin it, Alt+drag to move it.
+
+Switching view moves the camera rather than cutting. Between Above and Wide it flies (and zooms) from one to the other, the moon sliding to its new place; to or from Cut it makes the same flight while Cut's lighting comes in or goes; between Cut and Wide, which share a camera, only the lighting changes. To Frank or Below it flies down to just above the water, turns to look up the way the camera under the water does, goes through the surface and sinks to its depth, Snell's window closing from the whole sky to its circle, and the reverse on the way out. Frank and Below glide into each other.
 
 ### Settings in the address
 
