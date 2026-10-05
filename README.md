@@ -108,15 +108,35 @@ Halfway through the fade from Day to Sunset:
 
 ![Between day and sunset](docs/screenshots/17-sky-between.jpg)
 
+### Cut and Above
+
+Two more views put the moon in the sky above the water, where you can move it. Both are drawn with the scene's own code, so they show the same water: the surface is the same simulated ripples, swells and waves, the light is computed the same way, and every colour follows the sky preset.
+
+**Cut** opens the water up and looks at it from the side. The camera's eye sits under the surface; drag it about, or drag anywhere else to move the moon. A light overlay draws the surface as a wireframe and a fan of rays from the eye, each bending out through the surface or, past 48.6° from the local surface, reflecting back down (dashed). The water is lit one of two ways (the **Eye light** / **Side light** button):
+
+- **Eye light**: the light reaching the eye. Every direction from it glows with exactly what the scene shows the camera looking that way, so a fan of light converges on the eye: the sky through Snell's window, the moon's image as its brightest beam, and darkness past the critical angle, all moving with the waves. On the surface above, the same light draws the window as a bright circle.
+- **Side light**: god rays as you'd see them from the side: moonlight refracted down into the water and gathered under the broad waves' crests, shafts with depth that fade as they go down.
+
+![Cut, with the eye's light](docs/screenshots/24-cut.jpg)
+
+![Cut, with god rays seen from the side](docs/screenshots/25-cut-side.jpg)
+
+**Above** looks across the water from just above it. The moon hangs over the sea with its path of light broken up on the waves, and the surface fades into the sky over a long gradient toward the horizon. Drag to move the moon.
+
+![Above, at night](docs/screenshots/26-above.jpg)
+
+![Above, at sunset](docs/screenshots/27-above-sunset.jpg)
+
 ## Controls
 
-The controls sit in the lower right: the sky presets along the top, then plain white lines that reach left to line up under the first preset, solid up to the current value and blending quickly into a faint line that barely wobbles, then a row of buttons. Drag along a line, or focus it and use the arrow keys. Press **H** to hide or show the controls.
+The controls sit in the lower right: the sky presets and the three views along the top, then plain white lines that reach left to line up under the first preset, solid up to the current value and blending quickly into a faint line that barely wobbles, then a row of buttons. Drag along a line, or focus it and use the arrow keys. Press **H** to hide or show the controls.
 
 ![The line controls](docs/screenshots/11-controls.jpg)
 
 | Control | What it does | Range | Default |
 |---|---|---|---|
 | Day · Sunset · Night · Midnight · Eclipse | Sky presets; pressing one fades the scene to it | | Night |
+| Below · Cut · Above | The view: from under the water, the water cut open from the side, or across it from above | | Below |
 | Wind | Strength of the simulated wind ripples | 0 – 1.2 | 0.45 |
 | Warp | How much the height grid is bent | 0 – 2 | 1 |
 | Waves | Strength of the broad wind sea | 0 – 1.2 | 0.9 |
@@ -130,6 +150,7 @@ The controls sit in the lower right: the sky presets along the top, then plain w
 | Glow | Strength of the bloom | 0 – 2 | 0.6 |
 | In front / Behind | Moon in the water, or up in the sky behind the surface | | In front |
 | Bloom on/off | Turns the bloom off entirely | | on |
+| Eye light / Side light | In Cut: the light reaching the eye, or god rays seen from the side | | Eye light |
 | Pause | Freezes the water and the moon | | |
 
 Tap the water to drop a ripple, or drag across it to stir.
@@ -152,6 +173,8 @@ Every control can be set from the address, which is how the screenshots here wer
 ?murk=0                           clear water (1.5 is very cloudy)
 ?bloom=0                          bloom off
 ?turn=140                         turn the moon 140° to start
+?view=cut                         the water cut open from the side (?view=above: across it from above)
+?light=side                       in Cut, god rays seen from the side
 ?ui=0                             hide the controls
 ```
 
