@@ -112,7 +112,7 @@ Halfway through the fade from Day to Sunset:
 
 Three more views put the moon in the sky above the water, where you can move it. All are drawn with the scene's own code, so they show the same water: the surface is the same simulated ripples, swells and waves, the light is computed the same way, and every colour follows the sky preset.
 
-**Cut** opens the water up and looks at it from the side. The camera's eye sits under the surface; drag it about. As everywhere, drag the moon to spin it, Alt+drag to move it, and tap the water to drop a ripple. The water is lit one of two ways (the **Eye light** / **Side light** button):
+**Cut** opens the water up and looks at it from the side, across the open sea to the horizon behind the cut, as in Wide. The camera's eye sits under the surface; drag it about. As everywhere, drag the moon to spin it, Alt+drag to move it, and tap the water to drop a ripple. The water is lit one of two ways (the **Eye light** / **Side light** button):
 
 - **Eye light**: the light reaching the eye. Every direction from it glows with exactly what the scene shows the camera looking that way, so a fan of light converges on the eye: the sky through Snell's window, the moon's image as its brightest beam, and darkness past the critical angle, all moving with the waves. On the surface above, the same light draws the window as a bright circle.
 - **Side light**: god rays as you'd see them from the side: moonlight refracted down into the water and gathered under the broad waves' crests, shafts with depth that fade as they go down.
@@ -129,7 +129,7 @@ In all of them, the moon in the sky is the real one, the same 3D moon as in Belo
 
 ![Above, at sunset](docs/screenshots/27-above-sunset.jpg)
 
-**Wide** looks the way Cut does, from about where its camera is, but at the water whole rather than cut open, lit as in Above: the sky and moon reflected on the waves and a path of moonlight. It starts with the moon where it was on screen in Cut. In Cut too, a moon lowered far enough sets behind the horizon.
+**Wide** is Cut's view without the cut: the water whole rather than cut open, lit as in Above: the sky and moon reflected on the waves and a path of moonlight. It starts with the moon where it was on screen in Cut, the same size. In both, a moon lowered far enough sets behind the horizon.
 
 ![Wide, at night](docs/screenshots/28-wide.jpg)
 
@@ -137,7 +137,7 @@ In all of them, the moon in the sky is the real one, the same 3D moon as in Belo
 
 ## Controls
 
-The controls sit in the lower right: the sky presets and the four views along the top, then plain white lines that reach left to line up under the first preset, solid up to the current value and blending quickly into a faint line that barely wobbles, then a row of buttons. Drag along a line, or focus it and use the arrow keys. Press **H** to hide or show the controls.
+The controls sit in the lower right: the sky presets and the four views along the top, then plain white lines that reach left to line up under the first preset, solid up to the current value and blending quickly into a faint line that barely wobbles, then a row of buttons. Drag along a line, or focus it and use the arrow keys. Press **H** to hide or show the controls. Only the controls that do something in the current view are shown: Height, Drift, In front / Behind and Bloom are Below's, Glow shows only with the bloom on, Leak only where the camera under the water is looking (Below, and Cut with the eye's light), and the light button only in Cut.
 
 ![The line controls](docs/screenshots/11-controls.jpg)
 
