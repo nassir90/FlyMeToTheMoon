@@ -162,7 +162,7 @@ The controls sit in the lower right: the sky presets and the five views along th
 
 Tap the water to drop a ripple, or drag across it to stir. In every view: drag the moon to spin it, Alt+drag to move it.
 
-Switching view moves the camera rather than cutting. All five views are one water seen by one camera: every pixel casts a ray from the camera, which under the surface looks up through it and above it meets the sea from above. So a switch is that camera flying through the same world, straight through the surface when it goes under or comes out, with the moon (one moon, drawn and lit the same way everywhere) moving to its place; nothing is blended. Above to Wide is a zoom out; to or from Cut the cut sweeps through the water, out from the camera to its place, or back. Frank and Below glide into each other.
+Switching view moves the camera rather than cutting. All five views are one water seen by one camera: every pixel casts a ray from the camera, which under the surface looks up through it and above it meets the sea from above. So a switch is that camera flying through the same world, straight through the surface when it goes under or comes out, with the moon (one moon, drawn and lit the same way everywhere) moving to its place; nothing is blended. Above the water the moon is one fixed moon in the sky at its true size, so it stays put while the camera moves: Above to Wide only widens the lens. Going into Cut from above, the slab of water in front of the cut falls away under gravity, and coming out it rises back. From under the water the front slab is never there: the camera rises out through the surface just beyond the cut and comes back over the gap. Frank and Below glide into each other.
 
 ### Settings in the address
 
