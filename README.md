@@ -62,7 +62,7 @@ A bloom makes the image glow. It's computed at quarter size, with four samples s
 
 The moon's surface is NASA's Lunar Reconnaissance Orbiter colour mosaic, recoloured to the scene's teal palette by rank (so the real maria and ray craters stay where they are). Its normal map is computed from LRO laser altimetry. It's lit from the upper right, which leaves a shadowed crescent on the lower left, and the craters only show their relief along that terminator.
 
-Drag the moon to spin it. Let go mid-drag to throw it; press on it while it's turning to catch it. Arrow keys spin it too, and Space stops it.
+Drag the moon to spin it. Let go mid-drag to throw it; press on it while it's turning to catch it. Arrow keys spin it too, and Space stops it. Alt+drag moves it about the frame. The controls are the same in every view.
 
 ![The moon turned to show its far side](docs/screenshots/08-turned.jpg)
 
@@ -112,7 +112,7 @@ Halfway through the fade from Day to Sunset:
 
 Two more views put the moon in the sky above the water, where you can move it. Both are drawn with the scene's own code, so they show the same water: the surface is the same simulated ripples, swells and waves, the light is computed the same way, and every colour follows the sky preset.
 
-**Cut** opens the water up and looks at it from the side. The camera's eye sits under the surface; drag it about, or drag anywhere else to move the moon. The water is lit one of two ways (the **Eye light** / **Side light** button):
+**Cut** opens the water up and looks at it from the side. The camera's eye sits under the surface; drag it about. As everywhere, drag the moon to spin it, Alt+drag to move it, and tap the water to drop a ripple. The water is lit one of two ways (the **Eye light** / **Side light** button):
 
 - **Eye light**: the light reaching the eye. Every direction from it glows with exactly what the scene shows the camera looking that way, so a fan of light converges on the eye: the sky through Snell's window, the moon's image as its brightest beam, and darkness past the critical angle, all moving with the waves. On the surface above, the same light draws the window as a bright circle.
 - **Side light**: god rays as you'd see them from the side: moonlight refracted down into the water and gathered under the broad waves' crests, shafts with depth that fade as they go down.
@@ -123,7 +123,7 @@ Two more views put the moon in the sky above the water, where you can move it. B
 
 In both, the moon in the sky is the real one, the same 3D moon as in Below, with its colours, shading and spin, and its light (its beam to the eye, its glint, its path on the sea, the god rays) takes its colour under each sky: teal at night, gold at sunset, copper in the eclipse.
 
-**Above** looks across the water from just above it. The moon hangs over the sea with its path of light broken up on the waves, and the surface fades into the sky over a long gradient toward the horizon. Drag to move the moon.
+**Above** looks across the water from just above it. The moon hangs over the sea with its path of light broken up on the waves, and the surface fades into the sky over a long gradient toward the horizon. Alt+drag to move the moon; drag it to spin it.
 
 ![Above, at night](docs/screenshots/26-above.jpg)
 
@@ -155,7 +155,7 @@ The controls sit in the lower right: the sky presets and the three views along t
 | Eye light / Side light | In Cut: the light reaching the eye, or god rays seen from the side | | Eye light |
 | Pause | Freezes the water and the moon | | |
 
-Tap the water to drop a ripple, or drag across it to stir.
+Tap the water to drop a ripple, or drag across it to stir. In every view: drag the moon to spin it, Alt+drag to move it.
 
 ### Settings in the address
 
