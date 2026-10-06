@@ -127,7 +127,6 @@
   const flatCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   const flatVS = `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
   const quad = mat => new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat);
-  let outRT = null;   // where a view's final picture goes: the screen, or a texture while two are being blended
 
   const uniforms = {
     uTime: { value: 0 },
@@ -162,7 +161,6 @@
     uWarp: { value: 1 },
     uChopMode: { value: 1 },                      // 0: isotropic chop, 1: broad directional wind sea
     uLimit: { value: 0.18 },                      // soft cap on surface tilt (0 = off)
-    uScale: { value: 1 },
     // palette, set by the Sky control (see SKIES below)
     uDeepL: { value: new THREE.Vector3() }, uDeepR: { value: new THREE.Vector3() }, uUpLight: { value: new THREE.Vector3() },
     uSkyLow: { value: new THREE.Vector3() }, uSkyHigh: { value: new THREE.Vector3() },
@@ -266,6 +264,7 @@
   // its broken image in the surface, and every glint around it, is wherever a ray bends onto it.
   // =====================================================================================
   const CAM = { FS: 0.25, ALPHA: 0.648, DEPTH: 3.0, TILE: 20.0 };
+  const ROT = { C: 0.8916, S: 0.4529 };   // the turn of the simulation grid under the surface (shader and taps)
   const WATER = `
       uniform float uHaloGain, uMoonRC, uAbove, uLeak, uMurk;
       uniform vec2 uMoonC;
@@ -273,25 +272,24 @@
       vec3 gN = vec3(0.0, 1.0, 0.0); float gT = 0.0;   // surface normal and transmission at the last lookUp
       vec2 gLeakOff = vec2(0.0); float gLeakW = 0.0;   // where (and how much) the moon leaks into the dark water
       uniform vec3 uDeepL, uDeepR, uUpLight, uSkyLow, uSkyHigh, uGlowA, uGlowB, uHalo, uImage, uBloomTint;
-      uniform sampler2D uSim; uniform float uTime, uSwell, uChop, uWarp, uChopMode, uLimit, uScale; uniform vec2 uMoon; uniform float uMoonR;
-      const float FS = ${CAM.FS}, ALPHA = ${CAM.ALPHA}, DEPTH = ${CAM.DEPTH.toFixed(1)}, TILE = ${CAM.TILE.toFixed(1)};
-      const float SIM_N = ${SIM.toFixed(1)};
-      // the moon in the sky: elevation ~35 degrees straight ahead, drawn large (stylised), plus its glow
+      uniform sampler2D uSim; uniform float uTime, uSwell, uChop, uWarp, uChopMode, uLimit; uniform vec2 uMoon; uniform float uMoonR;
+      const float TILE = ${CAM.TILE.toFixed(1)}, SIM_N = ${SIM.toFixed(1)};
+      // the eye under the water (its depth and where it sits along the surface), and the moon in the sky above it
       uniform float uEyeDepth; uniform vec2 uEyeOff; uniform vec3 uSkyMoon;
-      #define SKY_MOON uSkyMoon
       const float MOON_COS = 0.995;        // angular radius ~5.7 degrees
       uniform vec3 uCamP, uCamR, uCamU, uCamF; uniform vec2 uCamC; uniform float uCamK, uCamAir;
-      vec2 screenPos(){ vec2 s = (gl_FragCoord.xy/uScale - uMoon) / uMoonR; return vec2(s.x, -s.y); }
+      vec2 screenPos(){ vec2 s = (gl_FragCoord.xy - uMoon) / uMoonR; return vec2(s.x, -s.y); }
       // the ray through a device pixel, from the camera
       vec3 rayAt(vec2 px){ return normalize(uCamF + (uCamR*(px.x - uCamC.x) + uCamU*(px.y - uCamC.y))*uCamK); }
       vec3 viewRay(vec2 s){ return rayAt(uMoon + vec2(s.x, -s.y)*uMoonR); }
+      // a wave's angular frequency from its wavenumber: deep water (time slowed for a calm night)
+      float omega(float k){ return sqrt(9.81*k)*0.45; }
       // one long swell: x height, yz slope
       vec3 swell(vec2 x, float ang, float lambda, float steep, float ph){
         float k = 6.2831/lambda;
         vec2 kv = k*vec2(cos(ang), sin(ang));
-        float w = sqrt(9.81*k)*0.45;                       // dispersion (time slowed for a calm night)
         float a = steep/k;
-        float th = dot(kv, x) - w*uTime + ph;
+        float th = dot(kv, x) - omega(k)*uTime + ph;
         return vec3(a*sin(th), a*cos(th)*kv);
       }
       float h11(float n){ return fract(sin(n*12.9898 + 4.1414)*43758.5453); }
@@ -308,8 +306,7 @@
             float ang = 0.35 + fi*2.39996;
             float k = 6.2831/lambda;
             vec2 kv = k*vec2(cos(ang), sin(ang)*0.8);
-            float w = sqrt(9.81*k)*0.45;
-            float th = dot(kv, x) - w*uTime + fi*1.7;
+            float th = dot(kv, x) - omega(k)*uTime + fi*1.7;
             g += 0.05*cos(th)*kv/k;
             lambda *= 0.86;
           }
@@ -323,8 +320,7 @@
           float steep = broad > 0.5 ? 0.028*(0.6 + 0.8*h11(fi + 40.0)) : 0.016*(0.6 + 0.8*h11(fi + 40.0));
           float k = 6.2831/lambda;
           vec2 kv = k*vec2(cos(ang), sin(ang));
-          float w = sqrt(9.81*k)*0.45;
-          float th = dot(kv, x) - w*uTime + h11(fi + 60.0)*6.2831;
+          float th = dot(kv, x) - omega(k)*uTime + h11(fi + 60.0)*6.2831;
           // short waves fade with distance faster than broad ones
           float fadeW = 1.0 / (1.0 + dist*(broad > 0.5 ? 0.05 : 0.2));
           g += steep*cos(th)*kv/k * fadeW;
@@ -354,8 +350,8 @@
       }
       // A non-uniform lattice: the surface coordinates are bent by a slow, smooth warp before the
       // height grid is read, then turned 27 degrees, so the grid is stretched and curved differently
-      // everywhere and never lines up with the screen. (The same warp lives in surfaceUV() in JS.)
-      const float ROT_C = 0.8916, ROT_S = 0.4529;
+      // everywhere and never lines up with the screen. (The same warp lives in xzUV() in JS.)
+      const float ROT_C = ${ROT.C}, ROT_S = ${ROT.S};
       vec2 warpXZ(vec2 x){
         vec2 w = 0.35*vec2(sin(dot(x, vec2(0.61, 0.23)) + uTime*0.11 + 1.3), cos(dot(x, vec2(-0.19, 0.57)) - uTime*0.09))
                + 0.18*vec2(sin(dot(x, vec2(-0.93, 1.21)) - uTime*0.17 + 4.1), sin(dot(x, vec2(1.37, 0.41)) + uTime*0.13 + 2.2))
@@ -417,11 +413,18 @@
         if (ci <= 0.0 || sa2 >= 1.0) return 0.0;
         return 1.0 - (0.0204 + 0.9796*pow(1.0 - sqrt(1.0 - sa2), 5.0));
       }
+      // the sky seen along r, out of the water: its gradient and the moon's glow; w: the moon's disc
+      vec4 skyAlong(vec3 r){
+        vec3 sky = mix(uSkyLow, uSkyHigh, smoothstep(0.05, 0.9, clamp(r.y, 0.0, 1.0)));
+        float c = dot(r, uSkyMoon);
+        return vec4(sky + uGlowA*exp((c - 1.0)/0.03) + uGlowB*exp((c - 1.0)/0.006), smoothstep(MOON_COS - 0.0012, MOON_COS + 0.0012, c));
+      }
+      // the fast jitter on the surface the leak is seen through
+      vec2 leakJitter(vec2 xz){ return vec2(vnoise(xz*3.0 + vec2(uTime*0.4, 0.0)), vnoise(xz*3.0 + vec2(5.2, -uTime*0.35))) - 0.5; }
       // Light leaking into the dark water: the ray is bent again through an exaggerated surface
       // (real slopes amplified and jittered fast), so the few rays that still get out pick up
       // badly scrambled fragments of sky, moon glow and moon.
-      vec3 leakLight(vec3 d, vec2 xz, vec2 slope){
-        vec2 jit = vec2(vnoise(xz*3.0 + vec2(uTime*0.4, 0.0)), vnoise(xz*3.0 + vec2(5.2, -uTime*0.35))) - 0.5;
+      vec3 leakLight(vec3 d, vec2 slope, vec2 jit){
         vec3 N = normalize(vec3(-(slope.x*6.0 + jit.x*0.9), 1.0, -(slope.y*6.0 + jit.y*0.9)));
         // averaged over a wide spread of angles, so the fragments shade in and out rather than cut
         float ci = dot(d, N), sg = 0.07;
@@ -429,16 +432,12 @@
         if (T < 1e-4) return vec3(0.0);
         vec3 r = refract(d, -N, 1.333);
         if (dot(r, r) < 1e-6) r = normalize(vec3(d.x, 0.02, d.z));   // grazing: just above the horizon
-        vec3 sky = mix(uSkyLow, uSkyHigh, smoothstep(0.05, 0.9, clamp(r.y, 0.0, 1.0)));
-        float c = dot(r, SKY_MOON);
-        sky += uGlowA*exp((c - 1.0)/0.03) + uGlowB*exp((c - 1.0)/0.006);
-        sky += uImage * smoothstep(MOON_COS - 0.0012, MOON_COS + 0.0012, c);
-        return sky * T;
+        vec4 sky = skyAlong(r);
+        return (sky.rgb + uImage*sky.w) * T;
       }
       // how badly the dark water scrambles what leaks through it: amplified slopes plus two
-      // fast jitters, as a screen offset
-      vec2 leakScramble(vec2 xz, vec2 slope){
-        vec2 j1 = vec2(vnoise(xz*3.0 + vec2(uTime*0.4, 0.0)), vnoise(xz*3.0 + vec2(5.2, -uTime*0.35))) - 0.5;
+      // fast jitters (j1: the leak's own), as a screen offset
+      vec2 leakScramble(vec2 xz, vec2 slope, vec2 j1){
         vec2 j2 = vec2(vnoise(xz*9.0 + vec2(-uTime*0.7, 1.3)), vnoise(xz*9.0 + vec2(2.7, uTime*0.6))) - 0.5;
         return (slope*6.0 + j1*0.9 + j2*0.6) * 0.12;
       }
@@ -471,8 +470,9 @@
             float below = 0.03 - d.y;
             vec2 xzF = d.xz*(uEyeDepth/0.03) + uEyeOff + vec2(0.0, below*40.0);
             vec3 slF = surfaceSlope(xzF, 8.0);
-            w += leakLight(normalize(vec3(d.x, 0.06, d.z)), xzF, slF.xy) * 0.4*uLeak * exp(-below*7.0);
-            gLeakOff = leakScramble(xzF, slF.xy) * 1.4; gLeakW = 0.45*uLeak * exp(-below*6.0);
+            vec2 jF = leakJitter(xzF);
+            w += leakLight(normalize(vec3(d.x, 0.06, d.z)), slF.xy, jF) * 0.4*uLeak * exp(-below*7.0);
+            gLeakOff = leakScramble(xzF, slF.xy, jF) * 1.4; gLeakW = 0.45*uLeak * exp(-below*6.0);
           }
           return vec4(w, 0.0);
         }
@@ -493,18 +493,12 @@
         vec3 r = refract(d, -N, 1.333);
         vec3 sky = uSkyLow;                                // light from just above the horizon, at grazing exit
         float disc = 0.0;
-        if (dot(r, r) > 1e-6) {
-          // night sky through the surface: #122238 near the horizon to #295075 high up
-          float el = clamp(r.y, 0.0, 1.0);
-          sky = mix(uSkyLow, uSkyHigh, smoothstep(0.05, 0.9, el));
-          float c = dot(r, SKY_MOON);
-          sky += uGlowA * exp((c - 1.0)/0.03) + uGlowB * exp((c - 1.0)/0.006);
-          disc = smoothstep(MOON_COS - 0.0012, MOON_COS + 0.0012, c);
-        }
+        if (dot(r, r) > 1e-6) { vec4 sa = skyAlong(r); sky = sa.rgb; disc = sa.w; }
         gT = Te;
         float dark = (1.0 - Te)*(1.0 - Te);                // where it's mostly mirror: the leak
-        gLeakOff = leakScramble(xz, sl.xy); gLeakW = 0.6*uLeak*dark;
-        vec3 col = Te*sky + (1.0 - Te)*deepR + leakLight(d, xz, sl.xy)*0.45*uLeak*dark;
+        vec2 jit = leakJitter(xz);
+        gLeakOff = leakScramble(xz, sl.xy, jit); gLeakW = 0.6*uLeak*dark;
+        vec3 col = Te*sky + (1.0 - Te)*deepR + leakLight(d, sl.xy, jit)*0.45*uLeak*dark;
         // crests and troughs of the broad waves focus and spread the light: long bands that move with them
         col *= 1.0 - clamp(sl.z*0.9, -0.3, 0.4);
         col = mix(col, murkColour(), murkAmount(ci));      // the murk: fills the edge, lightly veils the window
@@ -563,6 +557,8 @@
       }
       // ---- the cut: the water nearer than a plane (z = uCutZ, square to the view) taken away, its face showing ----
       uniform float uCutZ, uSideLight, uSlabY, uCutOpen; uniform vec3 uCutEye;
+      // the light reaching the eye under the water from direction e: what the camera there sees, the moon's image lit
+      vec3 eyeLight(vec3 e){ vec4 L = lookAlong(e, 0.5); return L.rgb + moonLight()*L.w; }
       // the cut face at q (below the surface, on the plane), seen along d: lit by what reaches the eye (uCutEye) or by
       // god rays seen from the side
       vec3 cutFace(vec3 q, vec3 d){
@@ -572,7 +568,7 @@
           // god rays seen from the side: march this pixel's view into the water behind the face, and at each step
           // follow the moonlight (refracted down into the water) back up to the surface it came through; where the
           // broad waves' crests gather it (the scene's own curvature) the water glows
-          vec3 Ld = refract(-SKY_MOON, vec3(0.0, 1.0, 0.0), 1.0/1.333);
+          vec3 Ld = refract(-uSkyMoon, vec3(0.0, 1.0, 0.0), 1.0/1.333);
           float len = min(5.0 / max(d.z, 0.05), 14.0), ds = len / 16.0, acc = 0.0;
           float jit = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233)))*43758.5453);
           if (q.y > -11.0) for (int i = 0; i < 16; i++) {
@@ -589,7 +585,7 @@
           // water sees looking that way, so the fan converges on the eye; sideways the haze, looking down the deep
           vec3 r = q - uCutEye, e = normalize(vec3(r.xy, 0.0));
           vec3 light;
-          if (e.y > 0.0) { vec4 L = lookAlong(e, 0.5); light = L.rgb + moonLight()*L.w; }
+          if (e.y > 0.0) light = eyeLight(e);
           else light = mix(hazeColour(e, 0.5), underwater(e, 0.5), smoothstep(0.0, 0.8, -e.y));
           col = mix(col, light, 0.85*smoothstep(0.0, 0.6, length(r)));
         }
@@ -597,18 +593,19 @@
       }
   `;
 
-  // background: the water, plus the big moon's halo
+  // background: the water, plus the big moon's halo. Alpha: the brightness of the moon's image in the surface here,
+  // for the glints and the bloom drawn later (so they never look at the water again)
   const bgScene = new THREE.Scene();
   bgScene.add(quad(new THREE.ShaderMaterial({
     uniforms, depthTest: false, depthWrite: false, vertexShader: flatVS,
     fragmentShader: WATER + `
       uniform vec2 uRes;
+      // col with the off-screen moon over it at uv, w of the way
+      vec3 overMoon(vec3 col, vec2 uv, float w){ vec4 m = texture2D(uMoonTex, uv); return col*(1.0 - m.a*w) + m.rgb*w; }
       void main(){
         if (uCamAir > 0.5) {   // a camera in the air (above the sea, or in the gap the cut leaves): sky, moon, water
           vec3 d = rayAt(gl_FragCoord.xy);
-          vec3 sky = skyDome(d, uSeaMoon, 0.0);
-          vec4 m = texture2D(uMoonTex, gl_FragCoord.xy/uRes);
-          sky = sky*(1.0 - m.a) + m.rgb;
+          vec3 sky = overMoon(skyDome(d, uSeaMoon, 0.0), gl_FragCoord.xy/uRes, 1.0);
           vec4 w = vec4(0.0);
           if (uCutZ < -1e8) w = lookAbove(d);
           else {
@@ -624,42 +621,36 @@
             if (!hit) {
               float tz = d.z > 1e-4 && uCamP.z < uCutZ ? (uCutZ - uCamP.z) / d.z : -1.0;
               vec3 q = uCamP + d * max(tz, 0.0);
-              if (tz > 0.0 && q.y < 0.0) { gl_FragColor = vec4(cutFace(q, d), 1.0); return; }
+              if (tz > 0.0 && q.y < 0.0) { gl_FragColor = vec4(cutFace(q, d), 0.0); return; }
               if (d.y < 0.0 && uCamP.y > 0.0) {
                 vec3 p = uCamP + d * (uCamP.y / -d.y);
                 if (p.z >= uCutZ) {
                   w = lookSurface(p, d);
                   // with the eye's light, Snell's window on the surface just beyond the cut, as the cut opens
                   if (uSideLight < 0.5) {
-                    vec4 L = lookAlong(normalize(p - uCutEye), 0.5);
-                    w.rgb = mix(w.rgb, L.rgb + moonLight()*L.w, 0.85 * uCutOpen * (1.0 - smoothstep(uCutZ + 2.5, uCutZ + 7.0, p.z)));
+                    w.rgb = mix(w.rgb, eyeLight(normalize(p - uCutEye)), 0.85 * uCutOpen * (1.0 - smoothstep(uCutZ + 2.5, uCutZ + 7.0, p.z)));
                   }
                 }
-              } else if (d.y < 0.0) { gl_FragColor = vec4(hazeColour(d, 0.5)*0.6, 1.0); return; }   // down into the gap
+              } else if (d.y < 0.0) { gl_FragColor = vec4(hazeColour(d, 0.5)*0.6, 0.0); return; }   // down into the gap
             }
           }
-          gl_FragColor = vec4(mix(sky, w.rgb, w.a), 1.0);
+          gl_FragColor = vec4(mix(sky, w.rgb, w.a), 0.0);
           return;
         }
-        vec2 s = screenPos();
-        vec3 col = lookUp(s).rgb;
+        vec4 look = lookUp(screenPos());
+        vec3 col = look.rgb;
+        vec2 uv = gl_FragCoord.xy/uRes;
         // the moon above the water, seen through the moving surface: looked up at a position bent by
         // the surface's slope, dimmed by Fresnel near the window's edge, gone past the critical angle
         float vis = uAbove * gT;
-        if (vis > 0.001) {
-          vec4 m = texture2D(uMoonTex, gl_FragCoord.xy/uRes + vec2(gN.x, gN.z)*0.08);
-          col = col*(1.0 - m.a*vis) + m.rgb*vis;
-        }
+        if (vis > 0.001) col = overMoon(col, uv + vec2(gN.x, gN.z)*0.08, vis);
         // where the water is dark, the moon still leaks through, faint and scrambled
         float lw = uAbove * gLeakW;
-        if (lw > 0.001) {
-          vec4 m2 = texture2D(uMoonTex, gl_FragCoord.xy/uRes + gLeakOff);
-          col = col*(1.0 - m2.a*lw) + m2.rgb*lw;
-        }
+        if (lw > 0.001) col = overMoon(col, uv + gLeakOff, lw);
         // halo around wherever the moon is: sharp edge, then a short exponential fall-off
         vec2 sm = (gl_FragCoord.xy - uMoonC) / uMoonRC;
         col += uHalo * uHaloGain * exp(-max(length(sm) - 0.99, 0.0)/0.19) * mix(1.0, gT, uAbove);
-        gl_FragColor = vec4(col, 1.0);
+        gl_FragColor = vec4(col, look.w);
       }`
   })));
 
@@ -734,7 +725,6 @@
           // crater relief over the whole face, not just along the shadow edge (after the wash,
           // so it still shows on a whitened moon)
           col *= 1.0 + clamp((nm - ng)*2.6, -0.45, 0.45) * uRelief;
-          // by day the dark seas turn see-through and the bright highlands stay solid
           // by day, darkness maps straight to transparency: the darkest seas vanish, the
           // brightest highlands stay solid
           float bright = smoothstep(0.43, 0.66, dot(albedo, vec3(0.2126, 0.7152, 0.0722)));
@@ -751,36 +741,36 @@
   // so the reflection sits in front of it. Plus a bloom on that image (quarter size, 4 samples
   // per pixel so thin glints count, blurred twice).
   // =====================================================================================
-  const imageUniforms = scale => Object.assign({}, uniforms, { uScale: { value: scale } });
+  // The water pass draws into bgRT, its alpha the image's brightness, and is copied to the screen; the glints and
+  // the bloom read that alpha rather than tracing the water again.
+  const rtOpts = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false, type: THREE.HalfFloatType };
+  const bgRT = new THREE.WebGLRenderTarget(2, 2, rtOpts);
+  const bgTex = { value: bgRT.texture };
+  const copyScene = new THREE.Scene();
+  copyScene.add(quad(new THREE.ShaderMaterial({
+    uniforms: { tBg: bgTex }, depthTest: false, depthWrite: false, vertexShader: flatVS,
+    fragmentShader: `uniform sampler2D tBg; varying vec2 vUv;
+      void main(){ gl_FragColor = vec4(texture2D(tBg, vUv).rgb, 1.0); }`
+  })));
   const glintScene = new THREE.Scene();
   glintScene.add(quad(new THREE.ShaderMaterial({
-    uniforms: imageUniforms(1), transparent: true, depthTest: false, depthWrite: false, vertexShader: flatVS,
-    fragmentShader: WATER + `
-      void main(){
-        vec2 s = screenPos();
-        if (uCamAir > 0.5 || viewRay(s).y < 0.03) { gl_FragColor = vec4(0.0); return; }
-        float m = lookUp(s).w;
-        gl_FragColor = vec4(uImage, clamp(m*1.15, 0.0, 1.0) * (1.0 - 0.92*uAbove));
-      }`
+    uniforms: { tBg: bgTex, uImage: uniforms.uImage, uAbove: uniforms.uAbove },
+    transparent: true, depthTest: false, depthWrite: false, vertexShader: flatVS,
+    fragmentShader: `uniform sampler2D tBg; uniform vec3 uImage; uniform float uAbove; varying vec2 vUv;
+      void main(){ gl_FragColor = vec4(uImage, clamp(texture2D(tBg, vUv).a*1.15, 0.0, 1.0) * (1.0 - 0.92*uAbove)); }`
   })));
 
-  const rtOpts = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false, type: THREE.HalfFloatType };
   const rtA = new THREE.WebGLRenderTarget(2, 2, rtOpts), rtB = new THREE.WebGLRenderTarget(2, 2, rtOpts);
   const glowU = { value: 0.6 };
   const brightScene = new THREE.Scene();
   brightScene.add(quad(new THREE.ShaderMaterial({
-    uniforms: Object.assign(imageUniforms(0.25), { uGlow: glowU }), depthTest: false, depthWrite: false, vertexShader: flatVS,
-    fragmentShader: WATER + `
-      uniform float uGlow;
+    uniforms: { tBg: bgTex, uRes: uniforms.uRes, uBloomTint: uniforms.uBloomTint, uAbove: uniforms.uAbove, uGlow: glowU },
+    depthTest: false, depthWrite: false, vertexShader: flatVS,
+    fragmentShader: `uniform sampler2D tBg; uniform vec2 uRes; uniform vec3 uBloomTint; uniform float uAbove, uGlow;
       void main(){
-        vec2 base = gl_FragCoord.xy/uScale;
-        float acc = 0.0;
-        if (uCamAir > 0.5) { gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }   // (the image is the one seen from under the water)
-        for (int k = 0; k < 4; k++) {
-          vec2 o = k == 0 ? vec2(-0.75, -1.75) : k == 1 ? vec2(1.75, -0.75) : k == 2 ? vec2(0.75, 1.75) : vec2(-1.75, 0.75);
-          vec2 sp = (base + o - uMoon) / uMoonR; sp.y = -sp.y;
-          if (viewRay(sp).y >= 0.03) acc += lookUp(sp).w;
-        }
+        vec2 base = gl_FragCoord.xy*4.0;   // (a quarter-size target: four samples per pixel, so thin glints count)
+        float acc = texture2D(tBg, (base + vec2(-0.75, -1.75))/uRes).a + texture2D(tBg, (base + vec2(1.75, -0.75))/uRes).a
+                  + texture2D(tBg, (base + vec2(0.75, 1.75))/uRes).a + texture2D(tBg, (base + vec2(-1.75, 0.75))/uRes).a;
         gl_FragColor = vec4(uBloomTint * acc * 0.25 * uGlow * (1.0 - 0.92*uAbove), 1.0);
       }`
   })));
@@ -815,7 +805,22 @@
       blurMat.uniforms.tSrc.value = rtB.texture; blurMat.uniforms.uStep.value.set(0, spread / rtA.height);
       renderer.setRenderTarget(rtA); renderer.render(blurScene, flatCam);
     }
-    renderer.setRenderTarget(null);
+  }
+  // One picture, in every view: the moon off-screen (drawBehind: to be seen in the sky or through the water), the
+  // water, then on screen, if the camera is under the water (wet), the moon in front of it (drawFront), the glints
+  // of its image, the bloom and the grain.
+  function compose(drawBehind, drawFront, wet) {
+    renderer.setClearColor(0x000000, 0); renderer.setRenderTarget(rtMoon); renderer.clear();
+    drawBehind();
+    renderer.setRenderTarget(bgRT); renderer.render(bgScene, flatCam);
+    if (wet && bloomOn) renderBloom();
+    renderer.setRenderTarget(null); renderer.setClearColor(CLEAR, 1); renderer.clear();
+    renderer.render(copyScene, flatCam);
+    if (!wet) return;
+    drawFront();
+    renderer.render(glintScene, flatCam);
+    if (bloomOn) renderer.render(bloomScene, flatCam);
+    renderer.render(overlayScene, flatCam);
   }
 
   // film grain and a light vignette
@@ -839,7 +844,8 @@
   // =====================================================================================
   const omega = new THREE.Vector3(0, 0, 0);
   const tmpQ = new THREE.Quaternion(), tmpV = new THREE.Vector3();
-  let touched = false, grabbing = false, stirring = false, last = null, lastMoveAt = 0;
+  let touched = false, grabbing = false, last = null, lastMoveAt = 0;
+  const mark = e => { last = { x: e.clientX, y: e.clientY, t: performance.now() }; };
   const FRICTION = 0.45, MAX_SPIN = 14;
   function rotateBy(axis, angle) { if (angle) { tmpQ.setFromAxisAngle(axis, angle); moon.quaternion.premultiply(tmpQ); } }
   function screenAxis(dx, dy, cam = camera) { return tmpV.set(dy, dx, 0).normalize().applyQuaternion(cam.quaternion); }
@@ -856,26 +862,11 @@
       omega.lerp(axis.multiplyScalar(angle / dt), 0.5);
       lastMoveAt = now;
     }
-    last = { x: e.clientX, y: e.clientY, t: now };
+    mark(e);
   }
   function catchMoon(e) {
     grabbing = true; touched = true; omega.set(0, 0, 0);   // caught
-    last = { x: e.clientX, y: e.clientY, t: performance.now() }; lastMoveAt = last.t; canvas.classList.add('grabbing');
-  }
-  // pointer -> moon-relative screen coords (moon radii, y down)
-  function toS(e) {
-    const pr = renderer.getPixelRatio();
-    const fx = e.clientX * pr, fy = (window.innerHeight - e.clientY) * pr;
-    return [(fx - uniforms.uMoon.value.x) / uniforms.uMoonR.value, -(fy - uniforms.uMoon.value.y) / uniforms.uMoonR.value];
-  }
-  // same ray as the shader: where on the surface (in simulation uv) does this pixel look?
-  function surfaceUV(sx, sy) {
-    let dx = sx*CAM.FS, dy = -sy*CAM.FS, dz = 1; const l = Math.hypot(dx, dy, dz); dx /= l; dy /= l; dz /= l;
-    const ca = Math.cos(CAM.ALPHA), sa = Math.sin(CAM.ALPHA);
-    const wx = -dx, wy = dy*ca + dz*sa, wz = -dy*sa + dz*ca;   // (screen right is -x, as for the camera in the shader)
-    if (wy < 0.03) return null;
-    const t = CAM.DEPTH / wy;
-    return [...xzUV(wx*t, wz*t), t];
+    mark(e); lastMoveAt = last.t; canvas.classList.add('grabbing');
   }
   // a point of the surface (xz) in simulation uv: the same bend and turn as warpXZ() in the shader, so a tap
   // lands where it was made
@@ -884,88 +875,34 @@
     const dx2 = 0.35*Math.sin(x*0.61 + z*0.23 + T*0.11 + 1.3) + 0.18*Math.sin(-x*0.93 + z*1.21 - T*0.17 + 4.1) + 0.09*Math.cos(x*2.3 - z*1.7 + T*0.23);
     const dz2 = 0.35*Math.cos(-x*0.19 + z*0.57 - T*0.09) + 0.18*Math.sin(x*1.37 + z*0.41 + T*0.13 + 2.2) + 0.09*Math.sin(x*1.1 + z*2.6 - T*0.21 + 0.7);
     x += dx2*W; z += dz2*W;
-    return [(0.8916*x - 0.4529*z) / CAM.TILE, (0.4529*x + 0.8916*z) / CAM.TILE];
+    return [(ROT.C*x - ROT.S*z) / CAM.TILE, (ROT.S*x + ROT.C*z) / CAM.TILE];
   }
-  function dropAtXZ(x, z, strength) {
+  function dropAtXZ(x, z, strength, radius = 0.02) {
     const [u, v] = xzUV(x, z);
-    if (drops.length < 8) drops.push(new THREE.Vector4(u - Math.floor(u), v - Math.floor(v), strength, 0.02));
+    if (drops.length < 8) drops.push(new THREE.Vector4(u - Math.floor(u), v - Math.floor(v), strength, radius));
   }
-  function dropAt(sx, sy, strength) {
-    const p = surfaceUV(sx, sy); if (!p) return;
-    const u = p[0] - Math.floor(p[0]), v = p[1] - Math.floor(p[1]);
-    // the same tap looks bigger close by and smaller far away
-    const radius = Math.max(0.016, Math.min(0.027, 0.068 / p[2]));
-    if (drops.length < 8) drops.push(new THREE.Vector4(u, v, strength, radius));
-  }
-  const onMoon = e => {
-    const pr = renderer.getPixelRatio();
-    const fx = e.clientX * pr, fy = (window.innerHeight - e.clientY) * pr;
-    return Math.hypot(fx - uniforms.uMoonC.value.x, fy - uniforms.uMoonC.value.y) < uniforms.uMoonRC.value;
-  };
-
-  let moving = false;   // Alt+drag: moving the moon about the frame
-  canvas.addEventListener('pointerdown', e => {
-    if (!under()) return;
-    const s = toS(e);
-    canvas.setPointerCapture(e.pointerId);
-    last = { x: e.clientX, y: e.clientY, t: performance.now() };
-    if (e.altKey) { moving = true; canvas.classList.add('grabbing'); }
-    else if (onMoon(e)) catchMoon(e);
-    else {
-      stirring = true; dropAt(s[0], s[1], 0.02);
-    }
-  });
-  canvas.addEventListener('pointermove', e => {
-    if (!under()) return;
-    const s = toS(e);
-    canvas.classList.toggle('over-moon', onMoon(e));
-    if (moving) {
-      const k = 2 * camera.position.z * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / window.innerHeight;   // world units per pixel at the moon
-      moonX += (e.clientX - last.x) * k; moonY -= (e.clientY - last.y) * k;
-      last = { x: e.clientX, y: e.clientY, t: performance.now() };
-      return;
-    }
-    if (stirring) {
-      if (Math.hypot(e.clientX - last.x, e.clientY - last.y) > 10) { dropAt(s[0], s[1], 0.01); last = { x: e.clientX, y: e.clientY, t: performance.now() }; }
-      return;
-    }
-    if (!grabbing) return;
-    spinMove(e, camera, uniforms.uMoonRC.value / renderer.getPixelRatio());
-  });
-  function release() {
-    stirring = false;
-    if (moving) { moving = false; canvas.classList.remove('grabbing'); }
-    if (!grabbing) return;
-    grabbing = false; canvas.classList.remove('grabbing');
-    if (performance.now() - lastMoveAt > 90) omega.set(0, 0, 0);
-    if (omega.length() > MAX_SPIN) omega.setLength(MAX_SPIN);
-  }
-  canvas.addEventListener('pointerup', release);
-  canvas.addEventListener('pointercancel', release);
   canvas.addEventListener('keydown', e => {
     const k = { ArrowLeft: [0, -1], ArrowRight: [0, 1], ArrowUp: [-1, 0], ArrowDown: [1, 0] }[e.key];
     if (k) { e.preventDefault(); touched = true; omega.add(screenAxis(k[1], k[0]).clone().multiplyScalar(0.8)); }
     else if (e.key === ' ') { e.preventDefault(); omega.set(0, 0, 0); }
   });
 
-  document.getElementById('wind').addEventListener('input', e => simMat.uniforms.uWind.value = parseFloat(e.target.value));
-  document.getElementById('warp').addEventListener('input', e => uniforms.uWarp.value = parseFloat(e.target.value));
-  document.getElementById('chop').addEventListener('input', e => uniforms.uChop.value = parseFloat(e.target.value));
-  document.getElementById('swell').addEventListener('input', e => uniforms.uSwell.value = parseFloat(e.target.value));
-  document.getElementById('speed').addEventListener('input', e => waveSpeed = parseFloat(e.target.value));
-  document.getElementById('height').addEventListener('input', e => moonHeight = parseFloat(e.target.value));
-  document.getElementById('drift').addEventListener('input', e => moonDrift = parseFloat(e.target.value));
-  document.getElementById('murk').addEventListener('input', e => uniforms.uMurk.value = parseFloat(e.target.value));
-  document.getElementById('leak').addEventListener('input', e => uniforms.uLeak.value = parseFloat(e.target.value));
-  document.getElementById('halo').addEventListener('input', e => uniforms.uHaloGain.value = parseFloat(e.target.value));
-  document.getElementById('glow').addEventListener('input', e => glowU.value = parseFloat(e.target.value));
+  // the parameter lines: the address key, the input, and what it sets
+  const PARAMS = [
+    ['wind', 'wind', v => simMat.uniforms.uWind.value = v], ['warp', 'warp', v => uniforms.uWarp.value = v],
+    ['waves', 'chop', v => uniforms.uChop.value = v], ['swell', 'swell', v => uniforms.uSwell.value = v],
+    ['speed', 'speed', v => waveSpeed = v], ['height', 'height', v => moonHeight = v], ['drift', 'drift', v => moonDrift = v],
+    ['murk', 'murk', v => uniforms.uMurk.value = v], ['leak', 'leak', v => uniforms.uLeak.value = v],
+    ['halo', 'halo', v => uniforms.uHaloGain.value = v], ['glow', 'glow', v => glowU.value = v],
+  ];
+  for (const [, id, set] of PARAMS) document.getElementById(id).addEventListener('input', e => set(parseFloat(e.target.value)));
   let bloomOn = true;
   const bloomBtn = document.getElementById('bloom');
   bloomBtn.addEventListener('click', () => {
     bloomOn = !bloomOn;
     bloomBtn.firstElementChild.textContent = bloomOn ? 'On' : 'Off';
     bloomBtn.setAttribute('aria-pressed', String(bloomOn));
-    if (typeof updateControls === 'function') updateControls();
+    updateControls();
   });
   let paused = false;
   const pauseBtn = document.getElementById('pause');
@@ -987,7 +924,7 @@
     uniforms.uRes.value.set(w * pr, h * pr);
     rtA.setSize(Math.max(1, Math.round(w * pr / 4)), Math.max(1, Math.round(h * pr / 4)));
     rtB.setSize(rtA.width, rtA.height);
-    rtMoon.setSize(Math.round(w * pr), Math.round(h * pr));
+    rtMoon.setSize(Math.round(w * pr), Math.round(h * pr)); bgRT.setSize(rtMoon.width, rtMoon.height);
   }
   window.addEventListener('resize', resize);
   resize();
@@ -996,13 +933,19 @@
   // The water is laid out around a fixed anchor (where the moon sits in the water), so it stays put
   // when the moon moves up into the sky; the halo and the pointer follow the moon itself.
   const ANCHOR = new THREE.Vector3(0, -0.5, 0);
+  const DEFAULT_MOON = new THREE.Vector3(0, 0.574, 0.819);   // the moon's direction in the sky over Frank and Below
+  // the radius on screen (device pixels) of a sphere of radius r at distance dist, for a camera of this field of view
+  const focalPx = fov => (uniforms.uRes.value.y / 2) / Math.tan(THREE.MathUtils.degToRad(fov / 2));
+  const pxRadius = (r, dist, fov) => focalPx(fov) * r / Math.sqrt(Math.max(dist * dist - r * r, 1e-6));
+  // where a point lands on screen (device pixels, bottom-left origin) for cam, into out
+  const pv = new THREE.Vector3();
+  function toDevice(point, cam, out) {
+    pv.copy(point).project(cam);
+    return out.set((pv.x * 0.5 + 0.5) * uniforms.uRes.value.x, (pv.y * 0.5 + 0.5) * uniforms.uRes.value.y);
+  }
   function project(point, radius, outPos) {
-    const dist = point.distanceTo(camera.position);
-    const p = point.clone().project(camera);
-    const res = uniforms.uRes.value;
-    outPos.set((p.x * 0.5 + 0.5) * res.x, (p.y * 0.5 + 0.5) * res.y);
-    const focal = (res.y / 2) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-    return focal * radius / Math.sqrt(Math.max(dist * dist - radius * radius, 1e-3));
+    toDevice(point, camera, outPos);
+    return pxRadius(radius, point.distanceTo(camera.position), camera.fov);
   }
   function updateMoonScreen() {
     uniforms.uMoonR.value = project(ANCHOR, MOON_R, uniforms.uMoon.value);
@@ -1017,6 +960,7 @@
     u.uCamP.value.set(0, -CAM.DEPTH, 0);
     u.uCamR.value.set(-1, 0, 0); u.uCamU.value.set(0, ca, -sa); u.uCamF.value.set(0, sa, ca);   // (a true camera: right is -x looking along +z)
     u.uCamC.value.copy(u.uMoon.value); u.uCamK.value = CAM.FS / u.uMoonR.value;
+    u.uEyeDepth.value = CAM.DEPTH; u.uEyeOff.value.set(0, 0); u.uSkyMoon.value.copy(DEFAULT_MOON);
   }
   // the water's camera from a three.js camera in the water's world; setWaterCam.offset: where its axis lands on
   // screen, from the middle (device pixels), for a camera whose axis is off centre
@@ -1043,13 +987,13 @@
   //   the side. Drag the eye about in it.
   //   In every view: drag the moon to spin it, Alt+drag to move it, tap or drag on the water to drop ripples.
   // =====================================================================================
-  const DEFAULT_MOON = new THREE.Vector3(0, 0.574, 0.819);
   // the views from under the water: Frank (the moon in front of the water) and Below (the moon behind it)
   let view = 'frank';
-  const under = () => view === 'frank' || view === 'below';
+  const underView = v => v === 'frank' || v === 'below', under = () => underView(view);
   const views = (() => {
     // the moon in the sky, one for every view above the water (they look along +z: it's low, ahead), at its true size
-    const V = { eyeX: 0, eyeDepth: 3, side: false, moon: new THREE.Vector3(0.12, 0.105, 1).normalize() };
+    // spot: where the moon this view draws lands on screen and its radius there (device pixels)
+    const V = { eyeX: 0, eyeDepth: 3, side: false, moon: new THREE.Vector3(0.12, 0.105, 1).normalize(), spot: { c: new THREE.Vector2(), r: 1 } };
     const v3 = new THREE.Vector3();
     const toScreen = (p, cam) => { v3.copy(p).project(cam); return [(v3.x + 1) / 2 * innerWidth, (1 - v3.y) / 2 * innerHeight]; };
     const ov = document.getElementById('overlay'), og = ov.getContext('2d');
@@ -1076,7 +1020,7 @@
       cam.updateProjectionMatrix(); cam.updateMatrixWorld();
     }
     const placeAbove = () => placeRig(aboveCam, 30), placeWide = () => placeRig(wideCam, 52);
-    const seaCam = () => (view === 'above' ? aboveCam : wideCam), seaMoon = () => V.moon;
+    const seaCam = () => (view === 'above' ? aboveCam : wideCam);
     const TRUE_SIN = Math.sqrt(1 - 0.995 * 0.995);   // the moon's angular radius (MOON_COS: ~5.7 degrees)
     const eyeAt = () => new THREE.Vector3(V.eyeX, -V.eyeDepth, CUT_Z);
 
@@ -1085,12 +1029,9 @@
     // screen, so it is lit and turned exactly as in Frank and Below, in every view and every frame of a move.
     const mv = new THREE.Vector3();
     function drawMoon(cam, c, r, opacity = 1) {
-      const H = uniforms.uRes.value.y;
       mv.copy(c).project(cam);
       if (mv.z > 1) return;   // behind the camera
-      const tanHalf = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2)), dist = c.distanceTo(cam.position);
-      const rPx = (r / Math.sqrt(Math.max(dist * dist - r * r, 1e-6))) * (H / 2) / tanHalf;
-      const D = 14, focal = (H / 2) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+      const rPx = pxRadius(r, c.distanceTo(cam.position), cam.fov), D = 14, focal = focalPx(camera.fov);
       const ray = new THREE.Vector3(mv.x, mv.y, 0.5).unproject(camera).sub(camera.position).normalize();
       const p0 = moonGroup.position.clone(), s0 = moonGroup.scale.clone(), f0 = moonUniforms.uMoonFade.value;
       moonGroup.position.copy(camera.position).addScaledVector(ray, D); moonGroup.scale.setScalar(rPx * D / focal / MOON_R);
@@ -1112,28 +1053,15 @@
       const air = cam.position.y >= 0 || (cutZ > -1e8 && cam.position.z < cutZ && cam.position.y > slabY);
       uniforms.uCamAir.value = air ? 1 : 0;
       if (cutZ > -1e8) { uniforms.uEyeDepth.value = V.eyeDepth; uniforms.uEyeOff.value.set(V.eyeX, CUT_Z); uniforms.uSkyMoon.value.copy(m); }
-      const under = !air, moonAt = cam.position.clone().addScaledVector(m, 600), r = 600 * sinR;
-      // the halo goes round the moon this camera sees, wherever and however big it is on screen right now (the
-      // static views keep their own moon's spot there, so it is put back afterwards)
-      const res = uniforms.uRes.value, C0 = uniforms.uMoonC.value.clone(), RC0 = uniforms.uMoonRC.value;
-      mv.copy(moonAt).project(cam);
-      uniforms.uMoonC.value.set((mv.x * 0.5 + 0.5) * res.x, (mv.y * 0.5 + 0.5) * res.y);
-      uniforms.uMoonRC.value = mv.z > 1 ? 1e-3 : (r / Math.sqrt(600 * 600 - r * r)) * (res.y / 2) / Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
-      if (under && bloomOn) renderBloom();
-      // the moon, drawn for this camera: placed in the sky (or seen through the water) by the water pass
-      renderer.setClearColor(0x000000, 0); renderer.setRenderTarget(rtMoon); renderer.clear();
-      drawMoon(cam, moonAt, r, under ? 1 - front : 1);
-      renderer.setRenderTarget(outRT); renderer.setClearColor(CLEAR, 1); renderer.clear();
-      renderer.render(bgScene, flatCam);
-      if (under) {
-        if (front > 0.002) drawMoon(cam, moonAt, r, front);
-        renderer.render(glintScene, flatCam);
-        if (bloomOn) renderer.render(bloomScene, flatCam);
-        renderer.render(overlayScene, flatCam);
-      }
+      const wet = !air, moonAt = cam.position.clone().addScaledVector(m, 600), r = 600 * sinR;
+      // where the moon lands on screen and how big: the halo goes round it, and the pointer finds it there (the views
+      // under the water keep their own moon's spot in the uniforms, so it is put back afterwards)
+      toDevice(moonAt, cam, V.spot.c); V.spot.r = pv.z > 1 ? 1e-3 : pxRadius(r, 600, cam.fov);
+      const C0 = uniforms.uMoonC.value.clone(), RC0 = uniforms.uMoonRC.value;
+      uniforms.uMoonC.value.copy(V.spot.c); uniforms.uMoonRC.value = V.spot.r;
+      // the moon, drawn for this camera: in the sky (or seen through the water) by the water pass, or in front of it
+      compose(() => drawMoon(cam, moonAt, r, wet ? 1 - front : 1), () => { if (front > 0.002) drawMoon(cam, moonAt, r, front); }, wet);
       uniforms.uMoonC.value.copy(C0); uniforms.uMoonRC.value = RC0;
-      V.moonScr = toScreen(cam.position.clone().addScaledVector(m, 100), cam);
-      V.moonR = Math.tan(Math.asin(sinR)) / (Math.tan(THREE.MathUtils.degToRad(cam.fov / 2)) / (innerHeight / 2));
     }
     // the eye in the cut, marked over the picture
     function drawOverlay(cam) {
@@ -1164,10 +1092,11 @@
     // surface and turns to look up, and back out the same way. Frank and Below glide into each other as before.
     const tc = new THREE.PerspectiveCamera(50, 1, 0.1, 2000);
     const poseOf = (cam, off) => ({ pos: cam.position.clone(), quat: cam.quaternion.clone(), fov: cam.fov, off: off || new THREE.Vector2() });
+    const eyeCam = new THREE.PerspectiveCamera(), basis = new THREE.Matrix4();
     function eyePose() {   // the camera under the water, as Frank and Below have it (its axis lands on the anchor)
-      const u = uniforms, c = new THREE.PerspectiveCamera();
+      const u = uniforms, c = eyeCam;
       c.position.copy(u.uCamP.value);
-      c.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(u.uCamR.value, u.uCamU.value, u.uCamF.value.clone().negate()));
+      c.quaternion.setFromRotationMatrix(basis.makeBasis(u.uCamR.value, u.uCamU.value, v3.copy(u.uCamF.value).negate()));
       const H = u.uRes.value.y;
       c.fov = THREE.MathUtils.radToDeg(2 * Math.atan(u.uCamK.value * H / 2));
       return poseOf(c, new THREE.Vector2(u.uCamC.value.x - u.uRes.value.x / 2, u.uCamC.value.y - H / 2));
@@ -1254,21 +1183,36 @@
         dir: slerpDir(a.dir, b.dir, kr), sin: a.sin + (b.sin - a.sin) * kr, front: a.front + (b.front - a.front) * kr };
     }
 
-    // ---- pointer: drag the moon to spin it, Alt+drag to move it, tap or drag the water to stir; in Cut, drag the eye ----
-    let drag = null;
+    // ---- pointer, in every view: drag the moon to spin it, Alt+drag to move it, tap or drag the water to stir; in Cut,
+    // drag the eye. (Not while the camera is moving between views.)
+    let drag = null;   // 'move' (the moon about), 'eye' or 'stir'; a spin is grabbing
     const nearEye = (e) => V.eyeScr && Math.hypot(e.clientX - V.eyeScr[0], e.clientY - V.eyeScr[1]) < 28;
-    const nearMoon = (e) => V.moonScr && Math.hypot(e.clientX - V.moonScr[0], e.clientY - V.moonScr[1]) < V.moonR * 1.1;
+    const moonSpot = () => (under() ? { c: uniforms.uMoonC.value, r: uniforms.uMoonRC.value } : V.spot);
+    const onMoon = e => {
+      const pr = renderer.getPixelRatio(), sp = moonSpot();
+      return Math.hypot(e.clientX * pr - sp.c.x, (innerHeight - e.clientY) * pr - sp.c.y) < sp.r * 1.1;
+    };
     const pointerRay = (e, cam) => v3.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1, 0.5).unproject(cam).sub(cam.position).normalize();
-    // a tap on the water drops a ripple where it lands (not where the cut has taken the water away)
+    // a tap drops a ripple where the water pass's own ray for that pixel meets the surface (from under it or above
+    // it; not where the cut has taken the water away), bigger close by
     function stir(e, strength) {
-      const cam = seaCam(), d = pointerRay(e, cam);
-      if (d.y >= -0.01) return;
-      const t = -cam.position.y / d.y, x = cam.position.x + d.x * t, z = cam.position.z + d.z * t;
-      if (view === 'cut' && z < CUT_Z) return;
-      dropAtXZ(x, z, strength);
+      const u = uniforms, pr = renderer.getPixelRatio(), K = u.uCamK.value, P = u.uCamP.value, wet = P.y < 0;
+      const d = v3.copy(u.uCamF.value).addScaledVector(u.uCamR.value, (e.clientX * pr - u.uCamC.value.x) * K)
+        .addScaledVector(u.uCamU.value, ((innerHeight - e.clientY) * pr - u.uCamC.value.y) * K).normalize();
+      if (wet ? d.y < 0.03 : d.y > -0.01) return;
+      const t = -P.y / d.y, x = P.x + d.x * t, z = P.z + d.z * t;
+      if (z < u.uCutZ.value) return;
+      dropAtXZ(x, z, strength, wet ? Math.max(0.016, Math.min(0.027, 0.068 / t)) : 0.02);
     }
+    // Alt+drag and the eye: under the water the moon moves about the frame; above it the moon (or the eye in the
+    // cut's face) goes where the pointer looks
     function apply(e) {
       if (!innerWidth || !innerHeight) return;
+      if (under()) {
+        const k = 2 * camera.position.z * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / innerHeight;   // world units per pixel at the moon
+        moonX += (e.clientX - last.x) * k; moonY -= (e.clientY - last.y) * k; mark(e);
+        return;
+      }
       const cam = seaCam(), d = pointerRay(e, cam);
       if (drag === 'eye') {   // the eye moves about in the cut's face
         if (Math.abs(d.z) < 1e-4) return;
@@ -1277,34 +1221,37 @@
         V.eyeX = Math.max(-12, Math.min(12, x)); V.eyeDepth = Math.max(0.5, Math.min(7, -y));
       } else {
         const el = Math.max(-0.08, Math.min(1.2, Math.asin(d.y))), az = Math.atan2(d.x, d.z);   // down to just below the horizon: it sets
-        seaMoon().set(Math.cos(el) * Math.sin(az), Math.sin(el), Math.cos(el) * Math.cos(az));
+        V.moon.set(Math.cos(el) * Math.sin(az), Math.sin(el), Math.cos(el) * Math.cos(az));
       }
     }
     canvas.addEventListener('pointerdown', e => {
-      if (under() || T) return;
-      canvas.setPointerCapture(e.pointerId);
-      last = { x: e.clientX, y: e.clientY, t: performance.now() };
-      if (e.altKey) drag = 'moon';
+      if (T) return;
+      canvas.setPointerCapture(e.pointerId); mark(e);
+      if (e.altKey) drag = 'move';
       else if (view === 'cut' && nearEye(e)) drag = 'eye';
-      else if (nearMoon(e)) { catchMoon(e); return; }
+      else if (onMoon(e)) { catchMoon(e); return; }
       else { drag = 'stir'; stir(e, 0.02); return; }
-      canvas.classList.add('grabbing'); apply(e);
+      canvas.classList.add('grabbing');
+      if (!under()) apply(e);
     });
     canvas.addEventListener('pointermove', e => {
-      if (under() || T) return;
-      if (grabbing) spinMove(e, seaCam(), V.moonR);
-      else if (drag === 'stir') { if (Math.hypot(e.clientX - last.x, e.clientY - last.y) > 10) { stir(e, 0.01); last = { x: e.clientX, y: e.clientY, t: performance.now() }; } }
+      if (T) return;
+      if (grabbing) spinMove(e, under() ? camera : seaCam(), moonSpot().r / renderer.getPixelRatio());
+      else if (drag === 'stir') { if (Math.hypot(e.clientX - last.x, e.clientY - last.y) > 10) { stir(e, 0.01); mark(e); } }
       else if (drag) apply(e);
-      else canvas.classList.toggle('over-moon', nearEye(e) || nearMoon(e));
+      else canvas.classList.toggle('over-moon', nearEye(e) || onMoon(e));
     });
-    const end = () => { if (drag) { drag = null; canvas.classList.remove('grabbing'); } };
-    canvas.addEventListener('pointerup', end); canvas.addEventListener('pointercancel', end);
+    function release() {
+      if (drag) { drag = null; canvas.classList.remove('grabbing'); }
+      if (!grabbing) return;
+      grabbing = false; canvas.classList.remove('grabbing');
+      if (performance.now() - lastMoveAt > 90) omega.set(0, 0, 0);
+      if (omega.length() > MAX_SPIN) omega.setLength(MAX_SPIN);
+    }
+    canvas.addEventListener('pointerup', release); canvas.addEventListener('pointercancel', release);
 
     V.render = renderView;
-    V.leave = () => {   // back to Frank or Below: the scene's own eye and moon, no cut
-      uniforms.uEyeDepth.value = 3; uniforms.uEyeOff.value.set(0, 0); uniforms.uSkyMoon.value.copy(DEFAULT_MOON); uniforms.uCutZ.value = -1e9;
-      drawOverlay(null);
-    };
+    V.leave = () => { uniforms.uCutZ.value = -1e9; drawOverlay(null); };   // back to Frank or Below: no cut (setEyeCam does the rest)
     return V;
   })();
   const viewBtns = [...document.querySelectorAll('[data-view]')], lightBtn = document.getElementById('cutlight');
@@ -1336,7 +1283,6 @@
   if (document.fonts) document.fonts.ready.then(alignPause);
   // Switching view: Frank and Below share one scene, so the moon just glides between them; any other switch moves
   // the camera from one view to the other (see views.startTransition). Instant from the address, and with reduced motion.
-  const underView = v => v === 'frank' || v === 'below';
   function setView(v, instant) {
     if (v === view) return;
     const from = view;
@@ -1410,22 +1356,10 @@
   }
   // the view from under the water (Frank and Below); up: how far the moon has gone up behind the surface
   function renderUnder(up) {
-    if (bloomOn) renderBloom();
-    renderer.setRenderTarget(outRT);
-    renderer.clear();
-    if (up > 0.001) {                           // the moon off-screen, to be seen through the surface
-      moonUniforms.uMoonFade.value = 1;
-      renderer.setClearColor(0x000000, 0);
-      renderer.setRenderTarget(rtMoon); renderer.clear(); renderer.render(scene, camera);
-      renderer.setRenderTarget(outRT); renderer.setClearColor(CLEAR, 1);
-      renderer.clear();
-    }
-    renderer.render(bgScene, flatCam);
-    moonUniforms.uMoonFade.value = 1 - up;
-    if (up < 0.999) renderer.render(scene, camera);
-    renderer.render(glintScene, flatCam);       // the moon's image, in front of the big moon
-    if (bloomOn) renderer.render(bloomScene, flatCam);
-    renderer.render(overlayScene, flatCam);
+    compose(
+      () => { if (up > 0.001) { moonUniforms.uMoonFade.value = 1; renderer.render(scene, camera); } },
+      () => { moonUniforms.uMoonFade.value = 1 - up; if (up < 0.999) renderer.render(scene, camera); },
+      true);
   }
   // ---------------------------------------------------------------------------------------
   // Line controls: a solid white line up to the value, blending quickly into a faint line
@@ -1558,7 +1492,7 @@
 
   // Settings from the address, e.g. ?sky=sunset&waves=1.2&swell=1.2&speed=0.3&bloom=0&turn=90&ui=0
   const q = new URLSearchParams(location.search);
-  for (const [key, id] of [['wind','wind'], ['warp','warp'], ['waves','chop'], ['swell','swell'], ['speed','speed'], ['height','height'], ['drift','drift'], ['halo','halo'], ['leak','leak'], ['murk','murk'], ['glow','glow']]) {
+  for (const [key, id] of PARAMS) {
     if (q.has(key)) { const el = document.getElementById(id); el.value = q.get(key); el.dispatchEvent(new Event('input')); }
   }
   if (q.has('sky')) {
@@ -1568,32 +1502,31 @@
   if (q.get('bloom') === '0') bloomBtn.click();
   if (/^(behind|above|sky)$/.test(q.get('moon') || '')) { setView('below', true); aboveT = 1; }
   if (q.has('turn')) rotateBy(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(parseFloat(q.get('turn')) || 0));
-  if (q.get('ui') === '0') { document.getElementById('controls').classList.add('hidden-ui'); pauseBtn.classList.add('hidden-ui'); }
+  const controlsEl = document.getElementById('controls');
+  const hideUI = on => { controlsEl.classList.toggle('hidden-ui', on); pauseBtn.classList.toggle('hidden-ui', on); };
+  if (q.get('ui') === '0') hideUI(true);
   if (/^(frank|below|cut|above|wide)$/.test(q.get('view') || '')) { setView(q.get('view'), true); if (view === 'below') aboveT = 1; }
   if (q.get('light') === 'side') lightBtn.click();
   updateControls();
 
-  // H hides and shows the controls
+  // H hides and shows all the controls; P the parameter lines (hidden to begin with)
   window.addEventListener('keydown', e => {
-    if (e.key !== 'h' && e.key !== 'H') return;
-    if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
-    const controls = document.getElementById('controls');
-    const hiding = !controls.classList.contains('hidden-ui');
-    if (hiding && (controls.contains(document.activeElement) || document.activeElement === pauseBtn)) canvas.focus();
-    controls.classList.toggle('hidden-ui', hiding); pauseBtn.classList.toggle('hidden-ui', hiding);
-  });
-  // P shows and hides the parameter lines (hidden to begin with)
-  window.addEventListener('keydown', e => {
-    if (e.key !== 'p' && e.key !== 'P') return;
-    if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
-    const controls = document.getElementById('controls');
-    const hiding = !controls.classList.contains('params-hidden');
-    if (hiding && document.activeElement && document.activeElement.closest('.line')) canvas.focus();
-    controls.classList.toggle('params-hidden', hiding);
-    if (!hiding) { controls.style.removeProperty('--line-w'); alignLines(); }
+    const k = e.key.toLowerCase();
+    if ((k !== 'h' && k !== 'p') || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+    const active = document.activeElement;
+    if (k === 'h') {
+      const hiding = !controlsEl.classList.contains('hidden-ui');
+      if (hiding && (controlsEl.contains(active) || active === pauseBtn)) canvas.focus();
+      hideUI(hiding);
+      return;
+    }
+    const hiding = !controlsEl.classList.contains('params-hidden');
+    if (hiding && active && active.closest('.line')) canvas.focus();
+    controlsEl.classList.toggle('params-hidden', hiding);
+    if (!hiding) { controlsEl.style.removeProperty('--line-w'); alignLines(); }
     alignPause();
   });
-  if (q.get('params') === '1') { document.getElementById('controls').classList.remove('params-hidden'); alignLines(); }
+  if (q.get('params') === '1') { controlsEl.classList.remove('params-hidden'); alignLines(); }
 
   frame();
 })();
