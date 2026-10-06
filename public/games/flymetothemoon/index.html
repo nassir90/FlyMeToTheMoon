@@ -101,18 +101,22 @@
 <button id="pause" class="corner" type="button" aria-label="Pause"><svg viewBox="0 0 12 12" aria-hidden="true"><g class="i-pause"><rect x="1.5" y="0.5" width="3" height="11"/><rect x="7.5" y="0.5" width="3" height="11"/></g><path class="i-play" d="M2 0.5 L11.5 6 L2 11.5 Z" hidden/></svg></button>
 <div class="err" id="err" hidden>This scene needs WebGL 2, which isn't available in this browser.</div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script>
+<script type="importmap">{ "imports": { "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.186.1/three.module.min.js" } }</script>
+<script type="module">
+import * as THREE from 'three';
+// the palette is tuned in the renderer's own (linear) values: no colour-space conversion anywhere
+THREE.ColorManagement.enabled = false;
 (function () {
   const canvas = document.getElementById('scene');
   let renderer;
   try {
-    renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true });   // (WebGL 2 only: throws without it)
   } catch (e) { renderer = null; }
-  if (!renderer || !renderer.capabilities.isWebGL2) {
+  if (!renderer) {
     document.getElementById('err').hidden = false;
     return;
   }
+  renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
   renderer.autoClear = false;
   const CLEAR = new THREE.Color(0x191313);
@@ -915,7 +919,7 @@
   const rtMoon = new THREE.WebGLRenderTarget(2, 2, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
   uniforms.uMoonTex.value = rtMoon.texture;
   function resize() {
-    const w = window.innerWidth, h = window.innerHeight;
+    const w = Math.max(1, window.innerWidth), h = Math.max(1, window.innerHeight);   // (never empty, even in a hidden window)
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     camera.position.z = w / h < 1 ? 14 / Math.max(w / h, 0.5) * 0.85 : 14;
@@ -924,7 +928,7 @@
     uniforms.uRes.value.set(w * pr, h * pr);
     rtA.setSize(Math.max(1, Math.round(w * pr / 4)), Math.max(1, Math.round(h * pr / 4)));
     rtB.setSize(rtA.width, rtA.height);
-    rtMoon.setSize(Math.round(w * pr), Math.round(h * pr)); bgRT.setSize(rtMoon.width, rtMoon.height);
+    rtMoon.setSize(Math.max(1, Math.round(w * pr)), Math.max(1, Math.round(h * pr))); bgRT.setSize(rtMoon.width, rtMoon.height);
   }
   window.addEventListener('resize', resize);
   resize();
@@ -1305,11 +1309,12 @@
     updateControls();
   });
 
-  const clock = new THREE.Clock();
+  let lastFrame = performance.now();
   let t = 0, wt = 0, simBudget = 0, aboveT = 0, aboveTo = 0, moonHeight = 0, moonX = 0, moonY = 0, moonDrift = 0, driftY = 0;
   let waveSpeed = 0.6;
   function frame() {
-    const dt = Math.min(clock.getDelta(), 0.05);
+    const now = performance.now(), dt = Math.min((now - lastFrame) / 1000, 0.05);
+    lastFrame = now;
     if (!paused) {
       t += dt * speed;
       // the water runs on its own clock, scaled by the Speed control: swells, waves, warp drift and

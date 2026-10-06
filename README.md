@@ -202,7 +202,7 @@ npm run dev      # local dev server
 npm run deploy   # deploy the worker and its assets
 ```
 
-It needs WebGL 2. [three.js](https://threejs.org/) r128 is loaded from cdnjs. Everything it depends on, and the maintained libraries that cover pieces it does itself, are listed in [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md).
+It needs WebGL 2. [three.js](https://threejs.org/) r186 is loaded from cdnjs as an ES module.
 
 ### Rebuilding the moon textures
 
