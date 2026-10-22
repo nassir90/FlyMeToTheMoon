@@ -29,9 +29,9 @@
     text-transform: uppercase; letter-spacing: 0.04em; text-shadow: 0 0 6px rgba(0, 0, 0, 0.55);
   }
   .controls.hidden-ui, .corner.hidden-ui { display: none; }
-  /* pause / play, bottom left, level with the row of buttons: an icon about the height of the labels' capitals */
+  /* pause / play, top left: an icon about the height of the labels' capitals */
   .corner {
-    position: fixed; bottom: calc(15px + env(safe-area-inset-bottom, 0px)); left: calc(12px + env(safe-area-inset-left, 0px));
+    position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); left: calc(12px + env(safe-area-inset-left, 0px));
     padding: 8px; background: none; border: 0; color: var(--ink); cursor: pointer;
     filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.6));
   }
@@ -1273,18 +1273,7 @@ THREE.ColorManagement.enabled = false;
     showRow('bloom', below);
     showRow('cutlight', cut);                                  // Cut's own parameter: how its water is lit
     tightenRows();
-    alignPause();
   }
-  // the pause / play icon sits level with the middle of the lowest row of words in the controls
-  function alignPause() {
-    const rows = [...document.querySelectorAll('#controls .squeeze')].map(e => e.getBoundingClientRect()).filter(r => r.height > 0);
-    if (!rows.length) return;
-    const lowest = rows.reduce((a, b) => (b.bottom > a.bottom ? b : a));
-    const mid = (lowest.top + lowest.bottom) / 2, h = pauseBtn.getBoundingClientRect().height || 28;
-    pauseBtn.style.bottom = `${Math.round(window.innerHeight - mid - h / 2)}px`;
-  }
-  window.addEventListener('resize', () => requestAnimationFrame(alignPause));
-  if (document.fonts) document.fonts.ready.then(alignPause);
   // Switching view: Frank and Below share one scene, so the moon just glides between them; any other switch moves
   // the camera from one view to the other (see views.startTransition). Instant from the address, and with reduced motion.
   function setView(v, instant) {
@@ -1529,7 +1518,6 @@ THREE.ColorManagement.enabled = false;
     if (hiding && active && active.closest('.line')) canvas.focus();
     controlsEl.classList.toggle('params-hidden', hiding);
     if (!hiding) { controlsEl.style.removeProperty('--line-w'); alignLines(); }
-    alignPause();
   });
   if (q.get('params') === '1') { controlsEl.classList.remove('params-hidden'); alignLines(); }
 
