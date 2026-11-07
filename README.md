@@ -218,3 +218,7 @@ python tools/make_textures.py
 ## Credits
 
 Moon imagery and elevation: NASA's Scientific Visualization Studio, [CGI Moon Kit](https://svs.gsfc.nasa.gov/4720) (LRO LROC colour mosaic and LOLA altimetry), public domain.
+
+## License
+
+The code is [MIT](LICENSE). The moon textures are NASA imagery and stay public domain.
