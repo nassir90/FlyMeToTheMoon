@@ -39,7 +39,6 @@ Every control can also be set in the address, for example `?sky=sunset&view=belo
 ```bash
 npm install
 npm run dev      # local dev server
-npm run deploy   # deploy the Cloudflare Worker
 ```
 
 `python tools/make_textures.py` rebuilds the moon textures from NASA's CGI Moon Kit (needs numpy and pillow).
