@@ -1,6 +1,6 @@
 # Fly Me to the Moon
 
-A full moon seen from under a simulated water surface, in WebGL. Taken from the outro of NEON GENESIS EVANGELION.
+Full moon seen from under a simulated water surface, in WebGL. Taken from the outro of NEON GENESIS EVANGELION.
 
 **Live:** [mpts.ie/games/flymetothemoon](https://mpts.ie/games/flymetothemoon/)
 
