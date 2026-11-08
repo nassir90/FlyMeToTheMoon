@@ -1,6 +1,6 @@
 # Fly Me to the Moon
 
-Full moon seen from under a simulated water surface, in WebGL. Taken from the outro of NEON GENESIS EVANGELION.
+Attempt at capturing the end of NEON GENESIS EVANGELION in threejs.
 
 **Live:** [mpts.ie/games/flymetothemoon](https://mpts.ie/games/flymetothemoon/)
 
